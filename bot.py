@@ -80,15 +80,24 @@ def dahl_chat(system: str, user: str, max_tokens: int = 1500) -> str:
         "temperature": 0.7,
         "max_tokens": max_tokens,
     }
-    req = urllib.request.Request(
-        DAHL_BASE + "/chat/completions",
-        data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json",
-                 "Authorization": f"Bearer {DAHL_KEY}"},
-    )
-    with urllib.request.urlopen(req, timeout=180) as r:
-        data = json.load(r)
-    return data["choices"][0]["message"]["content"].strip()
+    last_err = None
+    for intento in range(3):
+        try:
+            req = urllib.request.Request(
+                DAHL_BASE + "/chat/completions",
+                data=json.dumps(payload).encode(),
+                headers={"Content-Type": "application/json",
+                         "Authorization": f"Bearer {DAHL_KEY}"},
+            )
+            with urllib.request.urlopen(req, timeout=180) as r:
+                data = json.load(r)
+            return data["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            last_err = e
+            print(f"dahl intento {intento + 1} falló: {e} — reintentando", flush=True)
+            import time
+            time.sleep(5 * (intento + 1))
+    raise RuntimeError(f"DAHL no respondió tras 3 intentos: {last_err}")
 
 
 def ejecutar_orden(orden: str) -> str:
