@@ -23,6 +23,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import discord
 from discord import app_commands
 
+import telegram_hq  # centro de mando por Telegram (comandos + DMs proactivos)
+
 TOKEN = os.environ["DISCORD_BOT_TOKEN"]
 BOSS_ID = int(os.environ.get("BOSS_ID", "1426737376822296667"))
 DAHL_KEY = os.environ.get("DAHL_API_KEY", "")
@@ -437,7 +439,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 print("briefing: bot aún no listo", flush=True)
                 self._json({"ok": False, "error": "bot no listo"})
                 return
-            fut = asyncio.run_coroutine_threadsafe(enviar_briefing_dm(texto, acciones), BOT_LOOP)
+            fut = asyncio.run_coroutine_threadsafe(
+                telegram_hq.enviar_briefing_tg(texto, acciones), BOT_LOOP)
             try:
                 fut.result(timeout=120)
                 self._json({"ok": True, "enviado": True, "acciones": len(acciones)})
@@ -455,7 +458,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self._json({"ok": False, "error": str(e)[:200]})
                 return
             fut = asyncio.run_coroutine_threadsafe(
-                enviar_standup_dm(nombre, display, texto), BOT_LOOP)
+                telegram_hq.enviar_standup_tg(nombre, display, texto), BOT_LOOP)
             try:
                 enviado = fut.result(timeout=120)
                 self._json({"ok": True, "enviado": enviado, "depto": nombre})
@@ -493,7 +496,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
                         resultados.append((dept, tarea, res, parse_acciones(res)))
                 except Exception as e:
                     print(f"orquestación {dept} falló: {e}", flush=True)
-            fut = asyncio.run_coroutine_threadsafe(enviar_orquestacion_dm(resultados), BOT_LOOP)
+            fut = asyncio.run_coroutine_threadsafe(
+                telegram_hq.enviar_orquestacion_tg(resultados), BOT_LOOP)
             try:
                 enviado = fut.result(timeout=180)
                 self._json({"ok": True, "ordenes": len(resultados), "enviado": enviado})
@@ -510,7 +514,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 print(f"expansión falló: {e}", flush=True)
                 self._json({"ok": False, "error": str(e)[:200]})
                 return
-            fut = asyncio.run_coroutine_threadsafe(enviar_expansion_dm(texto), BOT_LOOP)
+            fut = asyncio.run_coroutine_threadsafe(
+                telegram_hq.enviar_expansion_tg(texto), BOT_LOOP)
             try:
                 enviado = fut.result(timeout=120)
                 self._json({"ok": True, "enviado": enviado})
@@ -541,8 +546,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 print(f"panel falló: {e}", flush=True)
                 self._json({"ok": False, "error": str(e)[:200]})
                 return
-            fut = asyncio.run_coroutine_threadsafe(enviar_dm_boss(
-                "📋 **Panel diario MenúYa CR**\n\n" + texto, StandupOrdenView()), BOT_LOOP)
+            fut = asyncio.run_coroutine_threadsafe(
+                telegram_hq.enviar_panel_tg("📋 Panel diario MenúYa CR\n\n" + texto), BOT_LOOP)
             try:
                 fut.result(timeout=120)
                 self._json({"ok": True, "enviado": True})
@@ -1145,4 +1150,18 @@ if __name__ == "__main__":
     if not TOKEN:
         raise SystemExit("Falta DISCORD_BOT_TOKEN")
     start_bridge()
-    bot.run(TOKEN)
+
+    async def _main():
+        # Telegram: centro de mando (comandos + DMs proactivos)
+        try:
+            tg_app = telegram_hq.build_app()
+            await tg_app.initialize()
+            await tg_app.start()
+            await tg_app.updater.start_polling()
+            print("TG: bot de Telegram iniciado como @menuyacr_bot", flush=True)
+        except SystemExit as e:
+            print(f"TG: no iniciado ({e}); sigo solo con Discord", flush=True)
+        # Discord: queda como respaldo
+        await bot.start(TOKEN)
+
+    asyncio.run(_main())
