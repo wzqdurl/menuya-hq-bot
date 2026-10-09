@@ -1,0 +1,463 @@
+{
+  "exportado_utc": "2026-10-09T11:54:30.179902+00:00",
+  "nota": "Respaldo de crons de Muse para disaster recovery. Si el runtime de Muse cae, recrear con cron.add usando id/schedule/body_completo. Los comandos apuntan a scripts en la VM (~/workspace/menuya-hq-railway/vm-bridge/).",
+  "total": 25,
+  "crons": [
+    {
+      "id": "menuya-crewai-midday-ops",
+      "title": "Turno mediodía del equipo CrewAI MenúYa",
+      "enabled": true,
+      "mode": "task",
+      "owner": "goal:20-en-dos-d-as-reto",
+      "schedule": {
+        "kind": "daily",
+        "spec": "12:51:00",
+        "timezone": "America/Costa_Rica"
+      },
+      "descripcion": "Turno MEDIODÍA del equipo CrewAI de MenúYa CR (prospección, cierres, contenido, finanzas + coordinadora).",
+      "endpoints": [],
+      "comandos": [
+        "python3 ~/workspace/crewai-menuya/notify-discord.py --title"
+      ],
+      "body_completo": "Turno MEDIODÍA del equipo CrewAI de MenúYa CR (prospección, cierres, contenido, finanzas + coordinadora).\n\n1. Ejecuta: `~/workspace/crewai-venv/bin/python ~/workspace/crewai-menuya/run-crew.py` (tarda ~10-20 min: 5 agentes con modelo gratis de OpenRouter; corre solo, sin intervención).\n   - Si falla por la API key o el venv, revisa: `~/.config/openrouter/api_key` existe y `~/workspace/crewai-venv/bin/python -c \"import crewai\"`.\n   - El reporte queda en `~/workspace/crewai-menuya/reports/YYYY-MM-DD.md`.\n2. Publica el reporte en el canal Discord de notificaciones: `python3 ~/workspace/crewai-menuya/notify-discord.py --title \"☀️ Turno mediodía — equipo CrewAI MenúYa CR\" --file ~/workspace/crewai-menuya/reports/YYYY-MM-DD.md` (usa la fecha real del reporte generado).\n3. Lee el reporte y entrégaselo al usuario en el chat como NOTIFICACIÓN del turno: resumen ejecutivo de la coordinadora + las 3 sugerencias + números de finanzas (cuánto falta para ₡200,000 y ritmo diario). Corto, español tico, sin adornos. Si algún agente falló, dilo plainly.\n4. Observaciones operativas (no el reporte) van al daily log `~/memory/YYYY-MM-DD.md`, no a MEMORY.md.\n\nNo publiques nada en X ni envíes WhatsApps: este turno solo produce borradores, prospectos y planes para que Durling apruebe."
+    },
+    {
+      "id": "menuya-hq-expansion",
+      "title": "Revisión de expansión del equipo",
+      "enabled": true,
+      "mode": "task",
+      "owner": "goal:20-en-dos-d-as-reto",
+      "schedule": {
+        "kind": "daily",
+        "spec": "09:00:00",
+        "timezone": "'@user.current'"
+      },
+      "descripcion": "Revisión de expansión del equipo: le pide a la coordinadora (bot de Railway) que evalúe qué rol falta en la empresa y proponga contrataciones por DM al jefe, con botón para contratar.",
+      "endpoints": [],
+      "comandos": [
+        "python3 ~/workspace/menuya-hq-railway/vm-bridge/bridge.py --expansion"
+      ],
+      "body_completo": "Revisión de expansión del equipo: le pide a la coordinadora (bot de Railway) que evalúe qué rol falta en la empresa y proponga contrataciones por DM al jefe, con botón para contratar.\n\nEjecuta: `python3 ~/workspace/menuya-hq-railway/vm-bridge/bridge.py --expansion`\n\nSi la plantilla está completa, no manda nada. Silencioso: no reportes al chat."
+    },
+    {
+      "id": "menuya-hq-panel",
+      "title": "Panel diario de la empresa",
+      "enabled": true,
+      "mode": "task",
+      "owner": "goal:20-en-dos-d-as-reto",
+      "schedule": {
+        "kind": "daily",
+        "spec": "08:00:00",
+        "timezone": "'@user.current'"
+      },
+      "descripcion": "Panel diario de la empresa: le pide a la coordinadora (bot de Railway) que genere el resumen del día con métricas, actividad por departamento, oportunidades, bloqueos y próximos pasos, usando el estado vivo y el log de operaciones. Llega por DM al jefe.",
+      "endpoints": [],
+      "comandos": [
+        "python3 ~/workspace/menuya-hq-railway/vm-bridge/bridge.py --panel"
+      ],
+      "body_completo": "Panel diario de la empresa: le pide a la coordinadora (bot de Railway) que genere el resumen del día con métricas, actividad por departamento, oportunidades, bloqueos y próximos pasos, usando el estado vivo y el log de operaciones. Llega por DM al jefe.\n\nEjecuta: `python3 ~/workspace/menuya-hq-railway/vm-bridge/bridge.py --panel`\n\nEl panel se entrega por DM de Discord."
+    },
+    {
+      "id": "menuya-hubspot-sync",
+      "title": "Sincronizar leads con HubSpot",
+      "enabled": true,
+      "mode": "task",
+      "owner": "goal:20-en-dos-d-as-reto",
+      "schedule": {
+        "kind": "daily",
+        "spec": "07:30:00",
+        "timezone": "'@user.current'"
+      },
+      "descripcion": "Sincroniza los leads de flujos.json con HubSpot CRM (contactos + negocios). Crea el contacto si no existe y el deal en la etapa correspondiente. Silencioso salvo errores.",
+      "endpoints": [],
+      "comandos": [
+        "python3 ~/workspace/menuya-hq-railway/vm-bridge/hubspot-sync.py"
+      ],
+      "body_completo": "Sincroniza los leads de flujos.json con HubSpot CRM (contactos + negocios). Crea el contacto si no existe y el deal en la etapa correspondiente. Silencioso salvo errores.\n\nEjecuta: `python3 ~/workspace/menuya-hq-railway/vm-bridge/hubspot-sync.py`"
+    },
+    {
+      "id": "menuya-prospeccion-diaria",
+      "title": "Prospección diaria a HubSpot",
+      "enabled": true,
+      "mode": "task",
+      "owner": "goal:20-en-dos-d-as-reto",
+      "schedule": {
+        "kind": "daily",
+        "spec": "10:00:00",
+        "timezone": "'@user.current'"
+      },
+      "descripcion": "Prospección diaria automática: pide 10 negocios nuevos al bot de Railway y los agrega a HubSpot como leads (evita duplicados).",
+      "endpoints": [],
+      "comandos": [
+        "python3 ~/workspace/menuya-hq-railway/vm-bridge/prospeccion-hubspot.py"
+      ],
+      "body_completo": "Prospección diaria automática: pide 10 negocios nuevos al bot de Railway y los agrega a HubSpot como leads (evita duplicados).\n\nEjecuta: `python3 ~/workspace/menuya-hq-railway/vm-bridge/prospeccion-hubspot.py`\n\nReporta cuántos leads nuevos se crearon."
+    },
+    {
+      "id": "menuya-recordatorio-aprobaciones",
+      "title": "Recordatorio aprobaciones pendientes",
+      "enabled": true,
+      "mode": "task",
+      "owner": "goal:20-en-dos-d-as-reto",
+      "schedule": {
+        "kind": "daily",
+        "spec": "21:00:00",
+        "timezone": "'@user.current'"
+      },
+      "descripcion": "Recordatorio diario de aprobaciones pendientes a Telegram: si hay acciones esperando aprobación del jefe por más de 24h, le recuerda con resumen claro (qué propone, a quién, por qué). Si no hay pendientes, silencio total.",
+      "endpoints": [],
+      "comandos": [
+        "python3 ~/workspace/menuya-hq-railway/vm-bridge/telegram-recordatorio.py"
+      ],
+      "body_completo": "Recordatorio diario de aprobaciones pendientes a Telegram: si hay acciones esperando aprobación del jefe por más de 24h, le recuerda con resumen claro (qué propone, a quién, por qué). Si no hay pendientes, silencio total.\n\nEjecuta: `python3 ~/workspace/menuya-hq-railway/vm-bridge/telegram-recordatorio.py`"
+    },
+    {
+      "id": "menuya-revisar-respuestas-am",
+      "title": "Revisar y responder prospectos MenúYa CR (mañana)",
+      "enabled": true,
+      "mode": "task",
+      "owner": "goal:20-en-dos-d-as-reto",
+      "schedule": {
+        "kind": "daily",
+        "spec": "10:51:00",
+        "timezone": "'@user.current'"
+      },
+      "descripcion": "Administración diaria de MenúYa CR — eres el administrador del negocio con autorización total.",
+      "endpoints": [],
+      "comandos": [],
+      "body_completo": "Administración diaria de MenúYa CR — eres el administrador del negocio con autorización total.\n\n1. Lee `~/workspace/goals/20-en-dos-d-as-reto/hidden_files/venta-directa/respuestas-vistas.md` (créalo si no existe). Los contactados están en `tanda1/2/3/4/5-mensajes.md` y `tanda-wa-mensajes.md` del mismo directorio.\n2. Revisa mensajes NUEVOS de prospectos en tres canales:\n   a) DMs de Instagram de @menuya.cr (navegador, sesión activa en el perfil compartido; si expiró usa el login guardado).\n   b) Bandeja de la página de Facebook \"MenúYa CR\" (navegador).\n   c) WhatsApp: NO uses el navegador (WhatsApp Web bloquea los clics automatizados — verificado 2026-10-07). En su lugar: primero verifica que el monitor esté corriendo con `ps aux | grep \"node monitor.js\" | grep -v grep`; si no hay proceso, arráncalo con `cd ~/workspace/goals/20-en-dos-d-as-reto/hidden_files/wa-bot && node monitor.js > monitor-out.log 2>&1 &` y espera 30 segundos. Luego lee `~/workspace/goals/20-en-dos-d-as-reto/hidden_files/wa-bot/inbox.json` — ahí están los mensajes entrantes (from, name, at, text, id). Compara los `id` con los ya gestionados en `respuestas-vistas.md` para procesar solo los nuevos.\n3. RESPONDE directamente cada respuesta nueva (autorización total del dueño). Reglas: voz \"somos\", nunca identidad personal; vender soluciones (más pedidos, menos espera), no menús sueltos; precios: ₡15.000 menú digital con QR, ₡25.000 sistema de pedidos por WhatsApp, pago único sin mensualidad, 50% adelanto por SINPE y 50% al entregar; si piden muestra gratis: confírmala y pide los datos (nombre del negocio, platos con precios, fotos si tienen, número de WhatsApp del negocio); si dicen que no: agradece y cierra sin insistir; nunca inventes clientes, ventas ni promesas.\n   - Respuestas de WhatsApp: envíalas con el bot: `cd ~/workspace/goals/20-en-dos-d-as-reto/hidden_files/wa-bot && node reply.js \"<jid>\" \"<texto>\"` (el jid sale del campo `from` en inbox.json). Espera 1-2 minutos entre respuestas si hay varias.\n   - Respuestas de Instagram/Facebook: responde con el navegador como antes.\n4. Prospectos contactados hace 4-5 días sin respuesta: envíales UN recordatorio amable y corto (máximo 1 por prospecto). Por WhatsApp usa `node reply.js`; por IG/FB usa el navegador.\n5. Actualiza `respuestas-vistas.md` con todo lo enviado y reportado (incluye los `id` de inbox.json ya gestionados).\n6. Reporta en el chat un resumen: a quién respondiste, qué dijeron y qué sigue. Si no hubo nada nuevo, termina en silencio."
+    },
+    {
+      "id": "menuya-revisar-respuestas",
+      "title": "Revisar respuestas de prospectos MenúYa CR",
+      "enabled": true,
+      "mode": "task",
+      "owner": "goal:20-en-dos-d-as-reto",
+      "schedule": {
+        "kind": "daily",
+        "spec": "19:51:00",
+        "timezone": "'@user.current'"
+      },
+      "descripcion": "Administración diaria de MenúYa CR — eres el administrador del negocio con autorización total.",
+      "endpoints": [],
+      "comandos": [],
+      "body_completo": "Administración diaria de MenúYa CR — eres el administrador del negocio con autorización total.\n\n1. Lee `~/workspace/goals/20-en-dos-d-as-reto/hidden_files/venta-directa/respuestas-vistas.md` (créalo si no existe). Los contactados están en `tanda1/2/3/4/5-mensajes.md` y `tanda-wa-mensajes.md` del mismo directorio.\n2. Revisa mensajes NUEVOS de prospectos en tres canales:\n   a) DMs de Instagram de @menuya.cr (navegador, sesión activa en el perfil compartido; si expiró usa el login guardado).\n   b) Bandeja de la página de Facebook \"MenúYa CR\" (navegador).\n   c) WhatsApp: NO uses el navegador (WhatsApp Web bloquea los clics automatizados — verificado 2026-10-07). En su lugar: primero verifica que el monitor esté corriendo con `ps aux | grep \"node monitor.js\" | grep -v grep`; si no hay proceso, arráncalo con `cd ~/workspace/goals/20-en-dos-d-as-reto/hidden_files/wa-bot && node monitor.js > monitor-out.log 2>&1 &` y espera 30 segundos. Luego lee `~/workspace/goals/20-en-dos-d-as-reto/hidden_files/wa-bot/inbox.json` — ahí están los mensajes entrantes (from, name, at, text, id). Compara los `id` con los ya gestionados en `respuestas-vistas.md` para procesar solo los nuevos.\n3. RESPONDE directamente cada respuesta nueva (autorización total del dueño). Reglas: voz \"somos\", nunca identidad personal; vender soluciones (más pedidos, menos espera), no menús sueltos; precios: ₡15.000 menú digital con QR, ₡25.000 sistema de pedidos por WhatsApp, pago único sin mensualidad, 50% adelanto por SINPE y 50% al entregar; si piden muestra gratis: confírmala y pide los datos (nombre del negocio, platos con precios, fotos si tienen, número de WhatsApp del negocio); si dicen que no: agradece y cierra sin insistir; nunca inventes clientes, ventas ni promesas.\n   - Respuestas de WhatsApp: envíalas con el bot: `cd ~/workspace/goals/20-en-dos-d-as-reto/hidden_files/wa-bot && node reply.js \"<jid>\" \"<texto>\"` (el jid sale del campo `from` en inbox.json). Espera 1-2 minutos entre respuestas si hay varias.\n   - Respuestas de Instagram/Facebook: responde con el navegador como antes.\n4. Prospectos contactados hace 4-5 días sin respuesta: envíales UN recordatorio amable y corto (máximo 1 por prospecto). Por WhatsApp usa `node reply.js`; por IG/FB usa el navegador.\n5. Actualiza `respuestas-vistas.md` con todo lo enviado y reportado (incluye los `id` de inbox.json ya gestionados).\n6. Reporta en el chat un resumen: a quién respondiste, qué dijeron y qué sigue. Si no hubo nada nuevo, termina en silencio."
+    },
+    {
+      "id": "menuya-team-daily-ops",
+      "title": "Turno diario del equipo MenúYa CR",
+      "enabled": true,
+      "mode": "task",
+      "owner": "goal:20-en-dos-d-as-reto",
+      "schedule": {
+        "kind": "daily",
+        "spec": "08:51:00",
+        "timezone": "America/Costa_Rica"
+      },
+      "descripcion": "Turno diario del equipo MenúYa CR (Alook).",
+      "endpoints": [],
+      "comandos": [
+        "python3 ~/workspace/alook/team-ops.py",
+        "python3 ~/workspace/crewai-menuya/notify-discord.py --title"
+      ],
+      "body_completo": "Turno diario del equipo MenúYa CR (Alook).\n\n1. Ejecuta el orquestador: `python3 ~/workspace/alook/team-ops.py` (tarda ~10-15 min: despierta a VENTAS, DISENO y SOPORTE por DM, les pasa las tareas del día encadenadas y compila el reporte).\n   - El script se auto-repara: levanta el stack Alook si está caído y reinicia el daemon con la API key si hace falta.\n   - El reporte queda en `~/workspace/alook/reports/YYYY-MM-DD.md`.\n2. Publica el reporte en el canal Discord de notificaciones: `python3 ~/workspace/crewai-menuya/notify-discord.py --title \"☀️ Turno mañana — equipo MenúYa CR\" --file ~/workspace/alook/reports/YYYY-MM-DD.md` (usa la fecha real del reporte generado).\n3. Lee el reporte generado y entrégaselo al usuario en el chat con un resumen corto en español tico: qué produjo cada miembro del equipo hoy. Si algún bot no respondió, dilo plainly y sin adornos.\n4. Observaciones operativas (no el reporte) van al daily log `~/memory/YYYY-MM-DD.md`, no a MEMORY.md.\n\nNo publiques nada en X ni envíes WhatsApps: este turno solo produce borradores y propuestas para que Durling apruebe."
+    },
+    {
+      "id": "menuya-team-evening-ops",
+      "title": "Turno noche del equipo MenúYa CR",
+      "enabled": true,
+      "mode": "task",
+      "owner": "goal:20-en-dos-d-as-reto",
+      "schedule": {
+        "kind": "daily",
+        "spec": "19:51:00",
+        "timezone": "America/Costa_Rica"
+      },
+      "descripcion": "Turno NOCHE del equipo MenúYa CR (Alook).",
+      "endpoints": [],
+      "comandos": [
+        "python3 ~/workspace/alook/team-ops.py --shift evening",
+        "python3 ~/workspace/crewai-menuya/notify-discord.py --title"
+      ],
+      "body_completo": "Turno NOCHE del equipo MenúYa CR (Alook).\n\n1. Ejecuta: `python3 ~/workspace/alook/team-ops.py --shift evening` (tarda ~10-15 min: despierta a VENTAS, DISENO y SOPORTE por DM; DISEÑO trabaja con lo que proponga VENTAS; compila el reporte).\n   - El script se auto-repara: levanta el stack Alook si está caído y reinicia el daemon con la API key si hace falta.\n   - El reporte queda en `~/workspace/alook/reports/YYYY-MM-DD-noche.md`.\n2. Publica el reporte en el canal Discord de notificaciones: `python3 ~/workspace/crewai-menuya/notify-discord.py --title \"🌙 Turno noche — equipo MenúYa CR\" --file ~/workspace/alook/reports/YYYY-MM-DD-noche.md` (usa la fecha real del reporte generado).\n3. Lee el reporte generado y entrégaselo al usuario en el chat con un resumen corto en español tico: ángulo nuevo de prospección, muestra propuesta y FAQ. Si algún bot no respondió, dilo plainly y sin adornos.\n4. Observaciones operativas (no el reporte) van al daily log `~/memory/YYYY-MM-DD.md`, no a MEMORY.md.\n\nNo publiques nada en X ni envíes WhatsApps: este turno solo produce borradores y propuestas para que Durling apruebe."
+    },
+    {
+      "id": "menuya-telegram-digest",
+      "title": "Resumen diario Telegram 8am",
+      "enabled": true,
+      "mode": "task",
+      "owner": "goal:20-en-dos-d-as-reto",
+      "schedule": {
+        "kind": "daily",
+        "spec": "08:00:00",
+        "timezone": "'@user.current'"
+      },
+      "descripcion": "Envía el resumen diario de MenúYa CR al Telegram del jefe (8am): meta, leads por etapa, vencidos, mensajes de WhatsApp de las últimas 24h y operaciones recientes.",
+      "endpoints": [],
+      "comandos": [
+        "python3 ~/workspace/menuya-hq-railway/vm-bridge/telegram-digest.py"
+      ],
+      "body_completo": "Envía el resumen diario de MenúYa CR al Telegram del jefe (8am): meta, leads por etapa, vencidos, mensajes de WhatsApp de las últimas 24h y operaciones recientes.\n\nEjecuta: `python3 ~/workspace/menuya-hq-railway/vm-bridge/telegram-digest.py`\n\nSilencioso salvo errores."
+    },
+    {
+      "id": "menuya-hq-briefing",
+      "title": "Informe proactivo de la coordinadora",
+      "enabled": true,
+      "mode": "task",
+      "owner": "goal:20-en-dos-d-as-reto",
+      "schedule": {
+        "kind": "interval",
+        "spec": "4h",
+        "timezone": "America/Costa_Rica"
+      },
+      "descripcion": "Informe proactivo de la coordinadora: le pide al bot de Railway que evalúe el estado del negocio y, solo si hay algo nuevo o accionable, le mande un DM al jefe con el informe y botones para ejecutar u ordenar.",
+      "endpoints": [],
+      "comandos": [
+        "python3 ~/workspace/menuya-hq-railway/vm-bridge/bridge.py --briefing"
+      ],
+      "body_completo": "Informe proactivo de la coordinadora: le pide al bot de Railway que evalúe el estado del negocio y, solo si hay algo nuevo o accionable, le mande un DM al jefe con el informe y botones para ejecutar u ordenar.\n\nEjecuta: `python3 ~/workspace/menuya-hq-railway/vm-bridge/bridge.py --briefing`\n\nLa coordinadora decide sola si hay algo que valga la pena (responde NADA NUEVO si no). Silencioso: no reportes al chat; el informe llega por DM de Discord si aplica."
+    },
+    {
+      "id": "menuya-hq-orquestador",
+      "title": "Gerente autónomo (ordena a departamentos)",
+      "enabled": true,
+      "mode": "task",
+      "owner": "goal:20-en-dos-d-as-reto",
+      "schedule": {
+        "kind": "interval",
+        "spec": "2h",
+        "timezone": "America/Costa_Rica"
+      },
+      "descripcion": "Gerente autónomo: le pide al bot de Railway que evalúe el estado y los flujos de leads, detecte qué hay que ejecutar (vencidos, inbox, disparadores) y ordene a los departamentos. Los resultados llegan por DM al jefe.",
+      "endpoints": [],
+      "comandos": [
+        "python3 ~/workspace/menuya-hq-railway/vm-bridge/bridge.py --orquestar"
+      ],
+      "body_completo": "Gerente autónomo: le pide al bot de Railway que evalúe el estado y los flujos de leads, detecte qué hay que ejecutar (vencidos, inbox, disparadores) y ordene a los departamentos. Los resultados llegan por DM al jefe.\n\nEjecuta: `python3 ~/workspace/menuya-hq-railway/vm-bridge/bridge.py --orquestar`\n\nSilencioso: no reportes al chat; el informe llega por DM si hay órdenes ejecutadas."
+    },
+    {
+      "id": "menuya-hq-standup",
+      "title": "Standup rotativo de departamentos",
+      "enabled": true,
+      "mode": "task",
+      "owner": "goal:20-en-dos-d-as-reto",
+      "schedule": {
+        "kind": "interval",
+        "spec": "2h",
+        "timezone": "America/Costa_Rica"
+      },
+      "descripcion": "Standup rotativo de departamentos: le pide al bot de Railway que el siguiente departamento en rotación entregue su micro-resultado del día por DM al jefe (con botones para aprobar acciones u ordenar).",
+      "endpoints": [],
+      "comandos": [
+        "python3 ~/workspace/menuya-hq-railway/vm-bridge/bridge.py --standup"
+      ],
+      "body_completo": "Standup rotativo de departamentos: le pide al bot de Railway que el siguiente departamento en rotación entregue su micro-resultado del día por DM al jefe (con botones para aprobar acciones u ordenar).\n\nEjecuta: `python3 ~/workspace/menuya-hq-railway/vm-bridge/bridge.py --standup`\n\nEl departamento decide solo si tiene algo útil (si no, calla). Silencioso: no reportes al chat."
+    },
+    {
+      "id": "menuya-reporte-crecimiento",
+      "title": "Reporte de crecimiento cada 6h",
+      "enabled": true,
+      "mode": "task",
+      "owner": "goal:20-en-dos-d-as-reto",
+      "schedule": {
+        "kind": "interval",
+        "spec": "6h",
+        "timezone": "America/Costa_Rica"
+      },
+      "descripcion": "Reporte de crecimiento cada 6 horas a Telegram: la coordinadora evalúa avance a la meta de ₡200k, leads nuevos, qué hizo el equipo y próximas prioridades.",
+      "endpoints": [],
+      "comandos": [
+        "python3 ~/workspace/menuya-hq-railway/vm-bridge/reporte-crecimiento.py"
+      ],
+      "body_completo": "Reporte de crecimiento cada 6 horas a Telegram: la coordinadora evalúa avance a la meta de ₡200k, leads nuevos, qué hizo el equipo y próximas prioridades.\n\nEjecuta: `python3 ~/workspace/menuya-hq-railway/vm-bridge/reporte-crecimiento.py`\n\nSilencioso si no hay nada nuevo (la coordinadora decide)."
+    },
+    {
+      "id": "menuya-telegram-heartbeat",
+      "title": "Heartbeat horario Telegram",
+      "enabled": true,
+      "mode": "task",
+      "owner": "goal:20-en-dos-d-as-reto",
+      "schedule": {
+        "kind": "interval",
+        "spec": "1h",
+        "timezone": "America/Costa_Rica"
+      },
+      "descripcion": "Heartbeat horario de MenúYa HQ a Telegram: verifica Railway, monitor de WhatsApp y aprobaciones pendientes. Mensaje corto.",
+      "endpoints": [],
+      "comandos": [
+        "python3 ~/workspace/menuya-hq-railway/vm-bridge/telegram-heartbeat.py"
+      ],
+      "body_completo": "Heartbeat horario de MenúYa HQ a Telegram: verifica Railway, monitor de WhatsApp y aprobaciones pendientes. Mensaje corto.\n\nEjecuta: `python3 ~/workspace/menuya-hq-railway/vm-bridge/telegram-heartbeat.py`\n\nSilencioso salvo fallos del propio script."
+    },
+    {
+      "id": "menuya-hq-acciones-poll",
+      "title": "Ejecutar acciones aprobadas del bot",
+      "enabled": true,
+      "mode": "task",
+      "owner": "goal:20-en-dos-d-as-reto",
+      "schedule": {
+        "kind": "interval",
+        "spec": "1m",
+        "timezone": "America/Costa_Rica"
+      },
+      "descripcion": "Puente empresa viva: reclama acciones aprobadas del bot de Railway y las ejecuta.",
+      "endpoints": [
+        "https://menuya-hq-bot-production.up.railway.app/acciones"
+      ],
+      "comandos": [
+        "python3 ~/workspace/menuya-hq-railway/vm-bridge/bridge.py --poll"
+      ],
+      "body_completo": "Puente empresa viva: reclama acciones aprobadas del bot de Railway y las ejecuta.\n\nEjecuta: `python3 ~/workspace/menuya-hq-railway/vm-bridge/bridge.py --poll`\n\nEsto pide a https://menuya-hq-bot-production.up.railway.app/acciones las acciones que el jefe aprobó con botones en Discord (ej: mandar WhatsApp a un lead) y las ejecuta con el bot de WhatsApp (node reply.js). Reporta el resultado de vuelta. Silencioso: no reportes al chat salvo fallos."
+    },
+    {
+      "id": "menuya-hq-coord-check",
+      "title": "Chequeo del Coordinador Central",
+      "enabled": true,
+      "mode": "task",
+      "owner": "goal:20-en-dos-d-as-reto",
+      "schedule": {
+        "kind": "interval",
+        "spec": "5m",
+        "timezone": "America/Costa_Rica"
+      },
+      "descripcion": "Chequeo liviano del Coordinador Central (sin IA costosa): verifica que Railway responda, detecta flujos de leads vencidos nuevos y mensajes nuevos en el inbox de WhatsApp. Registra todo en el log de operaciones.",
+      "endpoints": [],
+      "comandos": [
+        "python3 ~/workspace/menuya-hq-railway/vm-bridge/coord-check.py"
+      ],
+      "body_completo": "Chequeo liviano del Coordinador Central (sin IA costosa): verifica que Railway responda, detecta flujos de leads vencidos nuevos y mensajes nuevos en el inbox de WhatsApp. Registra todo en el log de operaciones.\n\nEjecuta: `python3 ~/workspace/menuya-hq-railway/vm-bridge/coord-check.py`\n\nSilencioso: no reportes al chat salvo que haya ALERTAS en la salida."
+    },
+    {
+      "id": "menuya-hq-estado-push",
+      "title": "Push estado vivo a Railway",
+      "enabled": true,
+      "mode": "task",
+      "owner": "goal:20-en-dos-d-as-reto",
+      "schedule": {
+        "kind": "interval",
+        "spec": "15m",
+        "timezone": "America/Costa_Rica"
+      },
+      "descripcion": "Puente empresa viva: empuja el estado real del negocio al bot de Railway.",
+      "endpoints": [
+        "https://menuya-hq-bot-production.up.railway.app/estado"
+      ],
+      "comandos": [
+        "python3 ~/workspace/menuya-hq-railway/vm-bridge/bridge.py --push"
+      ],
+      "body_completo": "Puente empresa viva: empuja el estado real del negocio al bot de Railway.\n\nEjecuta: `python3 ~/workspace/menuya-hq-railway/vm-bridge/bridge.py --push`\n\nEsto construye el estado (leads, respuestas WA, meta) y lo envía a https://menuya-hq-bot-production.up.railway.app/estado para que los empleados del bot lo lean en cada orden. Silencioso: no reportes al chat salvo que falle 3 veces seguidas."
+    },
+    {
+      "id": "menuya-recordatorio-delicias-48h",
+      "title": "'Recordatorio 48h: Las Delicias del Puerto (MenúYa CR)'",
+      "enabled": true,
+      "mode": "task",
+      "owner": "goal:20-en-dos-d-as-reto",
+      "schedule": {
+        "kind": "runonce",
+        "spec": "2026-10-09T20:55:00",
+        "timezone": "America/Costa_Rica"
+      },
+      "descripcion": "Recordatorio único de 48h para Las Delicias del Puerto (primer lead caliente de MenúYa CR) — compromiso hecho con el dueño el 2026-10-07 en la noche: si no responden en 48 horas, enviar UN recordatorio (máximo 1 por prospecto, regla vigente del negocio).",
+      "endpoints": [],
+      "comandos": [],
+      "body_completo": "Recordatorio único de 48h para Las Delicias del Puerto (primer lead caliente de MenúYa CR) — compromiso hecho con el dueño el 2026-10-07 en la noche: si no responden en 48 horas, enviar UN recordatorio (máximo 1 por prospecto, regla vigente del negocio).\n\n1. Lee `~/workspace/goals/20-en-dos-d-as-reto/hidden_files/venta-directa/respuestas-vistas.md` y revisa mensajes entrantes de WhatsApp: verifica que el monitor esté corriendo (`ps aux | grep \"node monitor.js\" | grep -v grep`; si no hay proceso, arráncalo con `cd ~/workspace/goals/20-en-dos-d-as-reto/hidden_files/wa-bot && node monitor.js > monitor-out.log 2>&1 &` y espera 30 segundos) y lee `wa-bot/inbox.json`. Busca cualquier respuesta de Las Delicias del Puerto (+506 8704 5770, jid `50687045770@s.whatsapp.net`) posterior a la propuesta (enviada 8:55pm del 7-oct, con corrección a precio de lanzamiento de ₡10.000 enviada ~9:02pm).\n2. Si HAY respuesta del prospecto: no hagas nada — los crons de revisión de 10:51am y 7:51pm la atienden.\n3. Si NO hay respuesta: envía UN recordatorio corto y amable con el bot: `cd ~/workspace/goals/20-en-dos-d-as-reto/hidden_files/wa-bot && node reply.js \"50687045770@s.whatsapp.net\" \"<texto>\"`. El texto, en voz plural de la marca (\"somos\", sin identidad personal): recuerda la propuesta del sistema completo a precio de lanzamiento de ₡10.000 (menú digital con QR + pedidos por WhatsApp, pago único, 50% adelanto por SINPE y 50% al entregar) y ofrece armar la muestra gratis con su nombre. No menciones los envíos duplicados ni pidas disculpas. Este es el único recordatorio: nunca envíes otro.\n4. Actualiza `respuestas-vistas.md` registrando lo que pasó (recordatorio enviado con hora, o no enviado por haber respuesta).\n5. Reporta brevemente en el chat qué pasó. Si hubo respuesta, termina en silencio (la respuesta ya la maneja el cron de revisión)."
+    },
+    {
+      "id": "menuya-reporte-24h-prueba-fuego",
+      "title": "'Reporte 24h: prueba de fuego + avance ₡200k'",
+      "enabled": true,
+      "mode": "task",
+      "owner": "goal:20-en-dos-d-as-reto",
+      "schedule": {
+        "kind": "runonce",
+        "spec": "2026-10-10T05:45:00",
+        "timezone": "America/Costa_Rica"
+      },
+      "descripcion": "Reporte de 24h para el jefe (prueba de fuego + avance). Él no respondió nada en Telegram durante 24h a propósito; este reporte demuestra con DATOS REALES que la empresa siguió trabajando sola. Sé honesto: reporta números verificados, no afirmaciones.",
+      "endpoints": [
+        "http://127.0.0.1:5678/"
+      ],
+      "comandos": [
+        "python3 ~/workspace/menuya-hq-railway/vm-bridge/bridge.py --pendientes"
+      ],
+      "body_completo": "Reporte de 24h para el jefe (prueba de fuego + avance). Él no respondió nada en Telegram durante 24h a propósito; este reporte demuestra con DATOS REALES que la empresa siguió trabajando sola. Sé honesto: reporta números verificados, no afirmaciones.\n\nRecopila con herramientas (exec/cron):\n1. HEARTBEATS: `cron.runs` del job `menuya-telegram-heartbeat` en las últimas 24h. Cuenta cuántos `succeeded` vs `failed`. Esperado: ~24 (corre cada hora). Reporta el número real.\n2. LEADS NUEVOS: contactos de HubSpot creados en las últimas 24h (API: GET /crm/v3/objects/contacts con filtro por createdate, token en ~/.config/hubspot/api_key). Lista nombre + hora de cada uno.\n3. COLA DE APROBACIÓN WHATSAPP: `python3 ~/workspace/menuya-hq-railway/vm-bridge/bridge.py --pendientes` o GET /pendientes en Railway. Cuántas acciones esperan su ✅ y de qué tipo.\n4. AVANCE ₡200,000: ingresos registrados (revisa flujos.json y notas), faltante, días restantes al 31-oct, meta diaria actual. Qué se hizo en 24h para avanzar y cuál es el plan concreto para conseguir lo que falta.\n5. PRUEBA DE FUEGO (observación 24h): para cada cron clave (menuya-hq-coord-check, menuya-hq-acciones-poll, menuya-hq-orquestador, menuya-hq-briefing, menuya-hq-standup, menuya-hq-estado-push, menuya-reporte-crecimiento, menuya-prospeccion-diaria, menuya-hubspot-sync, menuya-revisar-respuestas-am) revisa `cron.runs` de las últimas 24h: ¿siguieron corriendo sin su intervención? ¿algún fallo? ¿las colas crecieron (acciones pendientes ayer vs hoy)? ¿los reportes llegaron a Telegram? Verifica también: bot Railway responde /ping, monitor WhatsApp conectado (MONITOR_CONNECTED reciente en el log), flujo n8n de leads activo (http://127.0.0.1:5678/ responde).\n6. ALERTAS: si algo se cayó y no se recuperó solo, dilo claramente con la causa.\n\nFormato: mensaje directo en español casual, con los números al frente. Empieza con el veredicto de la prueba de fuego (pasó/no pasó y por qué). Incluye la hora exacta de cada dato. Si un dato no se pudo verificar, dilo en vez de inventarlo."
+    },
+    {
+      "id": "ofertas-empleo-durling",
+      "title": "Ofertas de trabajo nuevas para Durling",
+      "enabled": true,
+      "mode": "task",
+      "owner": "goal:b-squeda-de-trabajo-de-durling",
+      "schedule": {
+        "kind": "daily",
+        "spec": "19:51:00",
+        "timezone": "America/Costa_Rica"
+      },
+      "descripcion": "Revisión periódica de ofertas de empleo nuevas en Guanacaste para Durling Medrano Parra. Solo lectura: no inicies sesión en ningún sitio, no hagas clic en \"Postularme\", no envíes formularios.",
+      "endpoints": [
+        "https://cr.computrabajo.com/trabajo-de-guanacaste-sin-experiencia"
+      ],
+      "comandos": [],
+      "body_completo": "Revisión periódica de ofertas de empleo nuevas en Guanacaste para Durling Medrano Parra. Solo lectura: no inicies sesión en ningún sitio, no hagas clic en \"Postularme\", no envíes formularios.\n\nPERFIL (para decidir si una oferta encaja):\n- 18 años, noveno año de secundaria aprobado, contabilidad cursada hasta 5.° año en el CTP de Abangares.\n- Pasantía de 2 semanas en Tiendas Monge, Liberia (2025): apoyo en caja bajo supervisión, atención al cliente, apoyo en inventarios.\n- Sin experiencia laboral formal. Vive en San Miguel, Cañas, Guanacaste.\n- Disponibilidad: lunes a domingo; turnos nocturnos a convenir según ubicación y transporte; en Liberia puede trabajar a cualquier hora (puede quedarse en casa de un familiar).\n- Encajan: puestos de tienda, caja, atención al cliente, inventarios/bodega, ayudante general, limpieza o cocina, que pidan primaria o secundaria básica (noveno), sin experiencia o experiencia \"deseable no obligatoria\", edad mínima 18, ubicados en Cañas, Abangares, Liberia, Bagaces, Tilarán, Santa Cruz o alrededores de Guanacaste.\n- NO encajan: los que pidan bachillerato, universidad, 1 o más años de experiencia comprobada, edad mínima mayor de 18, o estén fuera de Guanacaste.\n\nQUÉ HACER:\n1. Abre https://cr.computrabajo.com/trabajo-de-guanacaste-sin-experiencia y lista los avisos publicados en las últimas 24 horas. Verifica la fecha de publicación de cada aviso en su página de detalle: SOLO cuentan los publicados dentro de las últimas 24 horas; ignora los más antiguos aunque encajen con el perfil.\n2. Lee el archivo ~/workspace/ofertas-empleo/ya-reportadas.md con las ofertas ya informadas al usuario y no las repitas bajo ninguna circunstancia.\n3. Para cada aviso NUEVO (publicado en las últimas 24 horas y no listado en ya-reportadas.md) que encaje con el perfil, abre su página de detalle y extrae: título del puesto, empresa, ubicación, salario, fecha de publicación, requisitos exactos y URL.\n4. Agrega las ofertas nuevas que reportes al archivo ya-reportadas.md para no repetirlas en futuras revisiones.\n\nQUÉ ENTREGAR (mensaje final en español, corto y directo):\n- Si hay ofertas nuevas que encajan: una por línea con título, empresa, ubicación, salario, requisitos clave y enlace.\n- Si no hay nada nuevo que encaje: no generes ningún mensaje para el usuario."
+    },
+    {
+      "id": "freetoken-bots-daily-scan",
+      "title": "Escaneo diario de modelos gratis (OpenRouter)",
+      "enabled": true,
+      "mode": "task",
+      "owner": "goal:free-deepseek-v4-flash-api-hunt",
+      "schedule": {
+        "kind": "daily",
+        "spec": "08:51:00",
+        "timezone": "America/Costa_Rica"
+      },
+      "descripcion": "Escaneo diario de modelos gratuitos de OpenRouter (skill FreeToken-Bots de min-skill). El catálogo gratis de OpenRouter cambia sin aviso: modelos que se vuelven de pago o desaparecen. El usuario dio la instrucción permanente de USAR automáticamente el mejor modelo gratis verificado, sin tener que pe",
+      "endpoints": [
+        "https://openrouter.ai/api/v1"
+      ],
+      "comandos": [
+        "python3 /home/hatch/.claude/skills/minli-skill/skills/FreeToken-Bots/scripts/radar.py status",
+        "python3 /home/hatch/.claude/skills/minli-skill/skills/FreeToken-Bots/scripts/radar.py scan",
+        "python3 /home/hatch/.claude/skills/minli-skill/skills/FreeToken-Bots/scripts/radar.py probe --model"
+      ],
+      "body_completo": "Escaneo diario de modelos gratuitos de OpenRouter (skill FreeToken-Bots de min-skill). El catálogo gratis de OpenRouter cambia sin aviso: modelos que se vuelven de pago o desaparecen. El usuario dio la instrucción permanente de USAR automáticamente el mejor modelo gratis verificado, sin tener que pedirlo cada vez, y aprobó guardar su clave de OpenRouter en ~/.config/openrouter/api_key (permisos 600, solo en esta máquina) para verificación automática.\n\n1. Lee el reporte anterior: `python3 /home/hatch/.claude/skills/minli-skill/skills/FreeToken-Bots/scripts/radar.py status` (contiene el JSON del último scan: eligible, needs_parameter_verification, free_ids, free_count).\n2. Corre el scan de hoy: `python3 /home/hatch/.claude/skills/minli-skill/skills/FreeToken-Bots/scripts/radar.py scan` (endpoint público /models de OpenRouter, no necesita clave; solo Python stdlib).\n3. Compara el reporte nuevo contra el anterior y detecta: modelos nuevos en `eligible` (flagships gratis ≥100B verificados), modelos que salieron de `free_ids` (ya no son gratis o fueron retirados), modelos repriced (estaban gratis y ya no), y cambios en `needs_parameter_verification`.\n4. Determina el \"modelo gratis recomendado de hoy\": primero algún flagship de `eligible` (≥100B verificado, con tools); si no hay, el mejor candidato de `needs_parameter_verification` con tools (p. ej. inclusionai/ling-3.1-flash). Incluye su ID exacto y la base https://openrouter.ai/api/v1.\n5. Verificación automática: si existe ~/.config/openrouter/api_key, haz probe del modelo recomendado con `OPENROUTER_API_KEY=$(cat ~/.config/openrouter/api_key) python3 /home/hatch/.claude/skills/minli-skill/skills/FreeToken-Bots/scripts/radar.py probe --model '<id-exacto>'`. El script es fail-closed: se niega a probar IDs no verificados como gratis. Un 429 es rate-limit temporal (no es fallo de la clave); un 401 sí sería problema de la clave y debe reportarse. NUNCA imprimas, registres ni incluyas en ningún mensaje el valor de la clave. Si el archivo no existe, omite el probe y avisa que falta la clave.\n6. Reporta en el chat (español, corto) cuando: (a) hay cambios significativos del paso 3, (b) el modelo recomendado cambió respecto al día anterior, o (c) el probe falló de forma que afecta el uso (401, modelo sin respuesta reiterada). Incluye el resultado del probe (ok / rate-limit / error) junto a la recomendación. Si nada cambió y el probe está ok, no reportes nada.\n7. No edites MEMORY.md; si algo relevante cambia, apúntalo en la nota diaria ~/memory/YYYY-MM-DD.md.\n\nEl script guarda su caché en ~/.pi/agent/freetoken-bots.json de forma atómica; no escribas archivos de reporte por corrida."
+    },
+    {
+      "id": "rust-mobile-ios-watch",
+      "title": "Vigilar Rust Mobile en el App Store",
+      "enabled": true,
+      "mode": "task",
+      "owner": "goal:lanzamiento-de-rust-mobile-en-ios",
+      "schedule": {
+        "kind": "daily",
+        "spec": "09:51:00",
+        "timezone": "'@user.current'"
+      },
+      "descripcion": "Vigilas el lanzamiento de Rust Mobile para iOS por encargo del usuario.",
+      "endpoints": [],
+      "comandos": [],
+      "body_completo": "Vigilas el lanzamiento de Rust Mobile para iOS por encargo del usuario.\n\nEn cada ejecución:\n1. Busca en la web si Rust Mobile ya está disponible para pre-ordenar o descargar en el App Store de iOS, o si Level Infinite/Facepunch anunció una fecha oficial de lanzamiento global o una nueva beta pública para iOS (por ejemplo, vía TestFlight).\n2. Verifica con al menos una fuente confiable (sitio oficial rustmobile.com, App Store, o prensa de videojuegos reconocida). No inventes enlaces: usa solo URLs que las herramientas te devuelvan.\n3. Si SÍ hay novedad real y verificada: avisa al usuario en el chat en español con el enlace directo, registra la actividad en el tracked item \"Lanzamiento de Rust Mobile en iOS\" con tracking.create_entry, cierra ese item con tracking.set_status (completed) y elimina este cron con cron.remove usando el id rust-mobile-ios-watch para que deje de revisarse.\n4. Si NO hay novedad: no envíes ningún mensaje al usuario. Quédate en silencio.\n\nEscribe tu respuesta final en español."
+    },
+    {
+      "id": "sleewppi-daily-draft",
+      "title": "Borrador diario @sleewppi (sin auto-publicar)",
+      "enabled": true,
+      "mode": "task",
+      "owner": "goal:x-account-for-ai-deals-and-referral-codes",
+      "schedule": {
+        "kind": "daily",
+        "spec": "09:51:00",
+        "timezone": "America/Costa_Rica"
+      },
+      "descripcion": "# Borrador diario para la cuenta X @sleewppi (\"mewpi\") — DRAFT ONLY, NUNCA PUBLICAR",
+      "endpoints": [
+        "https://openrouter.ai/api/v1/chat/completions`"
+      ],
+      "comandos": [
+        "python3 ~/.claude/skills/minli-skill/skills/FreeToken-Bots/scripts/radar.py status"
+      ],
+      "body_completo": "# Borrador diario para la cuenta X @sleewppi (\"mewpi\") — DRAFT ONLY, NUNCA PUBLICAR\n\nEres el redactor de la cuenta X @sleewppi del usuario. Tu trabajo en esta corrida: preparar UN borrador de post (texto en inglés + 1-2 imágenes) y dejarlo listo para que el usuario lo apruebe con un toque en el chat. **PROHIBIDO publicar en X, programar posts, o abrir tareas de navegador para publicar.** Solo preparas el borrador y lo reportas.\n\n## Por qué no se auto-publica\nLa cuenta es nueva y X banea cuentas que postean en automático o spamean links de referido. Cada post pasa por aprobación humana del dueño. Esta regla la puso el usuario el 2026-10-08 y no se cambia sin su orden explícita.\n\n## Paso 1 — Evita duplicados\nLee `~/workspace/goals/x-account-for-ai-deals-and-referral-codes/hidden_files/sleewppi-posted.json` (créalo como `{\"posted\":[],\"drafted\":[]}` si no existe). NO propongas nada que ya esté en `posted` o `drafted`. Temas ya publicados (no repetir):\n- Muse referral code 59TQ7R (varios posts, pinned en el perfil)\n- NVIDIA NIM free tier (deepseek-v4.1-flash)\n- Edimakor Fall Sale ($55.95 lifetime, termina 2026-10-10)\n- Phygitals referral app + incentivo $1 (2026-10-08)\n- Antseed (mercado P2P de inferencia)\n\n## Paso 2 — Busca el deal del día (en este orden)\n1. **Radar freetoken-bots**: corre `python3 ~/.claude/skills/minli-skill/skills/FreeToken-Bots/scripts/radar.py status` y mira el modelo gratis recomendado. Si es un modelo nuevo que nunca se posteó, es candidato fuerte. Verifica que siga gratis con un probe rápido a `https://openrouter.ai/api/v1/chat/completions` (hay key guardada en `~/.config/openrouter/api_key`, permisos 600 — úsala solo para el probe, nunca la muestres).\n2. **Cuentas de deals en X**: busca posts recientes (últimas 48h) de @igus_ai, @MinLiBuilds y cuentas similares sobre free tiers, créditos gratis o referral deals de IA.\n3. **Web**: busca lanzamientos con free tier generoso (Product Hunt, betas abiertas, \"free API credits\", \"no credit card required\"). Solo cuentan ofertas REALES y verificables: más de $10 de crédito o cuota equivalente, sin tarjeta.\n4. **Programas de referidos** que el usuario pueda aprovechar (él gana por referido).\n\n## Paso 3 — Verifica antes de redactar\nCada afirmación del borrador debe venir de una fuente oficial (página del producto, docs, pricing). Si no puedes verificar precio/fecha/condición, NO lo incluyas o marca el borrador como \"pendiente de verificación\". Nada de inventar bonos, fechas o precios.\n\n## Paso 4 — Redacta (formato que funciona)\n- Texto en inglés, corto (máx ~260 caracteres), tono casual directo como los posts anteriores. Estructura: emoji + qué es + el deal concreto + link o instrucción + 1-2 hashtags máx.\n- 1-2 imágenes: PREFERIBLE captura real de la página oficial del deal (usa la herramienta de captura del navegador si está disponible). Si no, genera una imagen limpia estilo producto con la herramienta de imágenes (nombre del producto + el deal en texto legible). PROHIBIDO: diagramas abstractos, arte genérico sin información (regla del usuario).\n- NADA de videos.\n\n## Paso 5 — Guarda el borrador\nGuarda en `~/workspace/goals/x-account-for-ai-deals-and-referral-codes/hidden_files/sleewppi-drafts/YYYY-MM-DD.md`:\n- Texto final del post (verbatim)\n- Rutas de las imágenes\n- Fuente verificada (URL oficial) + qué se verificó\n- Por qué este deal hoy (1-2 líneas)\nLuego agrega el tema a `drafted` en `sleewppi-posted.json` (solo el tema/título, no el texto entero).\n\n## Paso 6 — Reporta en el chat para aprobación\nTu mensaje final (español, corto, en el registro del usuario) debe traer:\n1. El deal elegido y por qué (1 línea)\n2. El texto del post verbatim\n3. Las imágenes (adjuntas o con su ruta)\n4. La frase exacta: \"¿Lo publico?\" — y NADA más sobre publicar. El usuario responde sí/no; la publicación la hace el agente principal en otra pasada, nunca este cron.\n\n## Si no hay buen deal\nNo fuerces un post flojo: reporta \"Hoy no hay deal que valga la pena para @sleewppi\" con 1 línea de lo que revisaste, y no guardes borrador. La cuenta publica 1 post/día MÁXIMO y puede saltarse días — el spam la mata.\n\n## Registro\nObservaciones de la corrida van al log diario `~/memory/YYYY-MM-DD.md` (líneas cortas). No edites `MEMORY.md`."
+    }
+  ]
+}
