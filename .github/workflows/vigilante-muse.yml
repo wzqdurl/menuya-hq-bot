@@ -1,0 +1,69 @@
+name: Vigilante Muse (cada 5 min)
+
+# Vigila que el RUNTIME DE MUSE siga vivo (no solo Railway).
+# Usa /vigilante: 200 si el estado-push de la VM es reciente (<30 min), 503 si no.
+# Tras 3 fallos seguidos -> alerta por Telegram (vía Railway, no depende de Muse)
+# y abre un issue (notificación por email). Al recuperarse, avisa también.
+# Corre en GitHub Actions (infra de Microsoft), independiente de Muse.
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  vigilar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Chequear /vigilante
+        id: check
+        run: |
+          CODE=$(curl -s -m 30 -o /tmp/v.json -w "%{http_code}" \
+            https://menuya-hq-bot-production.up.railway.app/vigilante || echo "000")
+          echo "HTTP $CODE"; cat /tmp/v.json 2>/dev/null; echo
+          echo "code=$CODE" >> $GITHUB_OUTPUT
+          mkdir -p metricas
+          [ -f metricas/vigilante-muse.json ] || echo '{"consecutivos":0,"alertado":false}' > metricas/vigilante-muse.json
+
+      - name: Evaluar racha y alertar
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CODE="${{ steps.check.outputs.code }}"
+          TS=$(date -u +%FT%TZ)
+          CONSEC=$(jq -r .consecutivos metricas/vigilante-muse.json)
+          ALERT=$(jq -r .alertado metricas/vigilante-muse.json)
+          BASE=https://menuya-hq-bot-production.up.railway.app
+          if [ "$CODE" = "200" ]; then
+            if [ "$ALERT" = "true" ]; then
+              curl -s -m 60 -X POST "$BASE/alerta-vigilante" \
+                -H "X-Bridge-Secret: ${{ secrets.BRIDGE_SECRET }}" \
+                -H "Content-Type: application/json" \
+                -d '{"texto":"✅ Vigilante externo: Muse volvió a responder. Los respaldos se desactivan solos."}' || true
+              gh issue create --title "✅ Muse recuperado ($TS)" \
+                --body "El vigilante volvió a ver pushes recientes de la VM. Todo normal." || true
+            fi
+            echo "{\"consecutivos\":0,\"alertado\":false,\"ts\":\"$TS\"}" > metricas/vigilante-muse.json
+          else
+            CONSEC=$((CONSEC + 1))
+            if [ "$CONSEC" -ge 3 ] && [ "$ALERT" != "true" ]; then
+              curl -s -m 60 -X POST "$BASE/alerta-vigilante" \
+                -H "X-Bridge-Secret: ${{ secrets.BRIDGE_SECRET }}" \
+                -H "Content-Type: application/json" \
+                -d '{"texto":"🚨 Vigilante externo: Muse NO responde hace 15+ min (3 chequeos seguidos sin push de la VM). Activos los respaldos de GitHub Actions (panel 8am, prospección, heartbeat). Revisa cuando puedas."}' || true
+              gh issue create --title "🚨 Muse posiblemente caído ($TS)" \
+                --body "3 chequeos seguidos a /vigilante sin push reciente de la VM. Último HTTP: $CODE. Los workflows de respaldo están activos." || true
+              ALERT=true
+            fi
+            echo "{\"consecutivos\":$CONSEC,\"alertado\":$ALERT,\"ts\":\"$TS\",\"http\":\"$CODE\"}" > metricas/vigilante-muse.json
+          fi
+          git config user.name "menuya-watchdog"
+          git config user.email "watchdog@menuya.cr"
+          git pull --rebase origin main --quiet || true
+          git add metricas/vigilante-muse.json
+          git diff --cached --quiet || (git commit -m "vigilante-muse $TS" --quiet && git push --quiet)
