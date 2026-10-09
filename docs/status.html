@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MenúYa HQ — Estado del sistema</title>
+<style>
+body{font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;margin:0;padding:2rem 1rem}
+.wrap{max-width:640px;margin:0 auto}
+h1{font-size:1.4rem}
+.card{background:#1e293b;border-radius:12px;padding:1.2rem;margin:1rem 0}
+.ok{color:#4ade80;font-weight:700}.fail{color:#f87171;font-weight:700}
+.muted{color:#94a3b8;font-size:.85rem}
+.row{display:flex;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid #334155}
+.row:last-child{border:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>🤖 MenúYa HQ — Estado</h1>
+<p class="muted">Actualizado automáticamente por el vigilante externo (GitHub Actions).</p>
+<div class="card" id="estado">Cargando…</div>
+<div class="card">
+<div class="row"><span>Bot Discord</span><span>MenúYa HQ#7883 · Railway 24/7</span></div>
+<div class="row"><span>Meta</span><span>₡200,000 antes del 31-oct-2026</span></div>
+<div class="row"><span>Departamentos</span><span>9</span></div>
+<div class="row"><span>WhatsApp</span><span>+506 6144 1067 · monitor systemd</span></div>
+</div>
+<p class="muted">Historial completo: <a style="color:#7dd3fc" href="https://github.com/wzqdurl/menuya-hq-bot/blob/main/metricas/heartbeat.jsonl">heartbeat.jsonl</a></p>
+</div>
+<script>
+fetch('status.json').then(r=>r.json()).then(s=>{
+  const el=document.getElementById('estado');
+  const cls=s.http===200?'ok':'fail';
+  const txt=s.http===200?'🟢 OPERATIVO':'🔴 CAÍDO';
+  el.innerHTML=`<div class="${cls}" style="font-size:1.3rem">${txt}</div>
+  <p class="muted">Último chequeo: ${s.ts} UTC · HTTP ${s.http}</p>
+  <p class="muted">Chequeos cada 30 min · historial cada 6 h</p>`;
+}).catch(()=>{document.getElementById('estado').innerHTML='<span class="fail">Sin datos aún</span>';});
+</script>
+</body>
+</html>
