@@ -363,6 +363,44 @@ class BridgeHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 print(f"standup DM falló: {e}", flush=True)
                 self._json({"ok": False, "error": str(e)[:200]})
+        elif self.path == "/orquestar":
+            if BOT_LOOP is None:
+                self._json({"ok": False, "error": "bot no listo"})
+                return
+            try:
+                texto = generar_orquestacion()
+            except Exception as e:
+                print(f"orquestación falló: {e}", flush=True)
+                self._json({"ok": False, "error": str(e)[:200]})
+                return
+            if "SIN ORDENES" in _norm(texto):
+                print("orquestación: sin disparadores", flush=True)
+                self._json({"ok": True, "ordenes": 0})
+                return
+            ordenes = parse_ordenes(texto)
+            resultados = []
+            hoy = datetime.now().strftime("%Y-%m-%d %H:%M")
+            est = estado_texto()
+            for dept, tarea in ordenes[:3]:
+                try:
+                    info = DEPTOS[dept]
+                    res = dahl_chat(
+                        info["persona"] + f"\n\nFECHA ACTUAL: {hoy}\nESTADO REAL DEL NEGOCIO:\n{est}",
+                        f"Orden del GERENTE AUTÓNOMO: {tarea}\n\nEjecutala con el ESTADO REAL y entrega "
+                        "el resultado concreto y listo. Si proponés acción real (WhatsApp), terminala con:\n"
+                        "ACCION: whatsapp | <numero> | <mensaje>",
+                        max_tokens=1500)
+                    if "NADA NUEVO" not in _norm(res):
+                        resultados.append((dept, tarea, res, parse_acciones(res)))
+                except Exception as e:
+                    print(f"orquestación {dept} falló: {e}", flush=True)
+            fut = asyncio.run_coroutine_threadsafe(enviar_orquestacion_dm(resultados), BOT_LOOP)
+            try:
+                enviado = fut.result(timeout=180)
+                self._json({"ok": True, "ordenes": len(resultados), "enviado": enviado})
+            except Exception as e:
+                print(f"orquestación DM falló: {e}", flush=True)
+                self._json({"ok": False, "error": str(e)[:200]})
         elif self.path == "/expansion":
             if BOT_LOOP is None:
                 self._json({"ok": False, "error": "bot no listo"})
@@ -615,6 +653,101 @@ async def enviar_dm_boss(texto, view=None):
     await user.send(texto[:1900], view=view)
 
 
+AVATAR_BASE = "https://raw.githubusercontent.com/wzqdurl/menuya-hq-bot/main/avatares"
+_AVATAR_CACHE = {}
+
+
+def avatar_de(dept):
+    """Descarga (y cachea) el avatar del departamento para adjuntarlo en DMs."""
+    key = dept.lower()
+    if key in _AVATAR_CACHE:
+        return _AVATAR_CACHE[key]
+    try:
+        path = f"/tmp/avatar-{key}.webp"
+        import os
+        if not os.path.exists(path):
+            req = urllib.request.Request(f"{AVATAR_BASE}/{key}.webp",
+                                         headers={"User-Agent": "menuya-hq"})
+            with urllib.request.urlopen(req, timeout=20) as r, open(path, "wb") as f:
+                f.write(r.read())
+        _AVATAR_CACHE[key] = path
+        return path
+    except Exception as e:
+        print(f"avatar {dept}: {e}", flush=True)
+        return None
+
+
+def parse_ordenes(texto):
+    ordenes = []
+    for line in texto.splitlines():
+        s = line.strip()
+        if s.upper().startswith("ORDEN:"):
+            try:
+                _, resto = s.split(":", 1)
+                dept, tarea = [x.strip() for x in resto.split("|", 1)]
+                key = _norm(dept)
+                real = None
+                for n in DEPTOS:
+                    if _norm(n) == key or _norm(DEPTOS[n]["display"]) == key:
+                        real = n
+                        break
+                if real and tarea:
+                    ordenes.append((real, tarea))
+            except ValueError:
+                continue
+    return ordenes
+
+
+def generar_orquestacion():
+    """El gerente autónomo: vigila el estado, detecta qué hay que ejecutar y ordena."""
+    roster_actual()
+    hoy = datetime.now().strftime("%Y-%m-%d %H:%M")
+    est = estado_texto()
+    nombres = ", ".join(DEPTOS.keys())
+    texto = dahl_chat(
+        COORD + f"\n\nFECHA ACTUAL: {hoy}\nESTADO REAL DEL NEGOCIO:\n{est}",
+        "Sos el GERENTE AUTÓNOMO. Evaluá estos DISPARADORES contra el ESTADO REAL y emití órdenes "
+        "solo para los que apliquen:\n"
+        "1) INBOX: hay mensajes nuevos de leads sin responder → ordená a CIERRES redactar la respuesta.\n"
+        "2) FRÍO: un lead caliente lleva 3+ días sin responder → ordená a SEGUIMIENTO el rescate.\n"
+        "3) PROSPECCIÓN: hoy no se propusieron negocios nuevos → ordená a PROSPECCION (10 negocios) o INVESTIGADOR (5 verificados).\n"
+        "4) CONTENIDO: hoy no hay post propuesto → ordená a CONTENIDO.\n"
+        "5) CÁLCULO: los números cambiaron o nunca se calcularon hoy → ordená a FINANZAS.\n"
+        "Formato por orden (una línea cada una):\nORDEN: <DEPARTAMENTO> | <tarea concreta en 1 línea>\n"
+        f"Departamentos: {nombres}. Máximo 3 órdenes por ciclo. "
+        "Si ningún disparador aplica, respondé exactamente: SIN ORDENES.",
+        max_tokens=800)
+    return texto
+
+
+async def enviar_orquestacion_dm(resultados):
+    """Informa al jefe qué ordenó el gerente autónomo y qué resultó."""
+    if not resultados:
+        return False
+    user = await bot.fetch_user(BOSS_ID)
+    lineas = []
+    todas_acciones = []
+    for dept, tarea, resultado, acciones in resultados:
+        display = DEPTOS[dept]["display"]
+        lineas.append(f"🎯 **Ordené a {display}**: {tarea[:120]}")
+        limpio = "\n".join(l for l in resultado.splitlines()
+                           if not l.strip().upper().startswith("ACCION:")).rstrip()
+        lineas.append(limpio[:900])
+        todas_acciones.extend(acciones)
+        lineas.append("")
+    msg = "🤖 **Gerente autónomo — órdenes ejecutadas**\n\n" + "\n".join(lineas)
+    if todas_acciones:
+        msg += f"\n👆 {len(todas_acciones)} acción(es) propuesta(s) abajo."
+    await user.send(msg[:1900], view=StandupOrdenView())
+    for ac in todas_acciones:
+        a = queue_accion(ac["tipo"], ac["destino"], ac["mensaje"])
+        await user.send(
+            f"📲 **Acción propuesta** — WhatsApp al `+{a['destino']}`:\n> {a['mensaje'][:500]}",
+            view=AccionView(a))
+    print(f"orquestación: {len(resultados)} órdenes ejecutadas", flush=True)
+    return True
+
+
 async def enviar_standup_dm(nombre, display, texto):
     if "NADA NUEVO" in _norm(texto):
         print(f"standup {nombre}: nada nuevo", flush=True)
@@ -628,7 +761,11 @@ async def enviar_standup_dm(nombre, display, texto):
     if acciones:
         msg += f"\n\n👆 {len(acciones)} acción(es) propuesta(s)."
     user = await bot.fetch_user(BOSS_ID)
-    await user.send(msg, view=view)
+    files = []
+    av = avatar_de(nombre)
+    if av:
+        files.append(discord.File(av, filename="avatar.webp"))
+    await user.send(msg, view=view, files=files if files else None)
     for ac in acciones:
         a = queue_accion(ac["tipo"], ac["destino"], ac["mensaje"])
         await user.send(
