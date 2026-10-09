@@ -522,6 +522,31 @@ class BridgeHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 print(f"expansión DM falló: {e}", flush=True)
                 self._json({"ok": False, "error": str(e)[:200]})
+        elif self.path == "/reporte-crecimiento":
+            # Reporte de crecimiento cada 6h: la coordinadora evalúa qué generó
+            # crecimiento real hacia la meta y qué sigue.
+            if BOT_LOOP is None:
+                self._json({"ok": False, "error": "bot no listo"})
+                return
+            try:
+                texto = generar_reporte_crecimiento()
+            except Exception as e:
+                print(f"reporte-crecimiento falló: {e}", flush=True)
+                self._json({"ok": False, "error": str(e)[:200]})
+                return
+            if "NADA NUEVO" in texto.upper():
+                print("reporte-crecimiento: nada nuevo, silencio", flush=True)
+                self._json({"ok": True, "enviado": False})
+                return
+            fut = asyncio.run_coroutine_threadsafe(
+                telegram_hq.enviar_panel_tg("📈 Reporte de crecimiento MenúYa CR\n\n" + texto),
+                BOT_LOOP)
+            try:
+                fut.result(timeout=120)
+                self._json({"ok": True, "enviado": True})
+            except Exception as e:
+                print(f"reporte-crecimiento TG falló: {e}", flush=True)
+                self._json({"ok": False, "error": str(e)[:200]})
         elif self.path == "/panel":
             # Panel diario: la coordinadora sintetiza las últimas 24h con estado + log
             if BOT_LOOP is None:
@@ -576,6 +601,13 @@ class BridgeHandler(BaseHTTPRequestHandler):
         elif self.path == "/salud":
             self._json({"ok": True, "estado_actualizado": ESTADO["actualizado"],
                         "acciones": len(ACCIONES)})
+        elif self.path == "/pendientes":
+            # Acciones esperando aprobación del jefe (para el recordatorio 24h)
+            pend = [a for a in ACCIONES if a["estado"] == "pendiente"]
+            self._json({"pendientes": [
+                {"id": a["id"], "tipo": a["tipo"], "destino": a["destino"],
+                 "mensaje": a["mensaje"][:300], "creada": a.get("creada", "")}
+                for a in pend]})
         else:
             self._json({"error": "ruta desconocida"}, 404)
 
@@ -670,7 +702,8 @@ def queue_accion(tipo, destino, mensaje):
     global _ACCION_SEQ
     _ACCION_SEQ += 1
     a = {"id": _ACCION_SEQ, "tipo": tipo, "destino": destino, "mensaje": mensaje,
-         "estado": "pendiente", "resultado": ""}
+         "estado": "pendiente", "resultado": "",
+         "creada": datetime.now().isoformat(timespec="seconds")}
     ACCIONES.append(a)
     guardar_acciones()
     return a
@@ -784,6 +817,27 @@ def generar_expansion():
         "PROPUESTA_CONTRATACION: <NOMBRE_CORTO> | <por qué hace falta, 1 línea> | <persona completa del nuevo empleado: rol, responsabilidades, tono, reglas>\n"
         "La persona debe ser concreta y útil desde el día 1. Si la plantilla está completa, "
         "respondé exactamente: PLANTILLA COMPLETA.",
+        max_tokens=1500)
+    return texto
+
+
+def generar_reporte_crecimiento():
+    """Reporte cada 6h: qué generó crecimiento real hacia la meta de ₡200k."""
+    roster_actual()
+    hoy = datetime.now().strftime("%Y-%m-%d %H:%M")
+    est = estado_texto()
+    hist = "\n---\n".join(BRIEFINGS[-5:]) or "(sin informes previos)"
+    texto = dahl_chat(
+        COORD + f"\n\nFECHA ACTUAL: {hoy}\nESTADO REAL DEL NEGOCIO:\n{est}",
+        "Sos la coordinadora de MenúYa CR. Escribí el REPORTE DE CRECIMIENTO de las últimas 6 horas "
+        "para el jefe (Durling). Máximo 1500 caracteres, tono directo, tico.\n"
+        "Secciones:\n"
+        "📈 AVANCE A LA META (dónde estamos vs ₡200k al 31-oct, ritmo)\n"
+        "🆕 LEADS Y OPORTUNIDADES (nuevos, movimientos, rescates)\n"
+        "⚙️ QUÉ HIZO EL EQUIPO (resultados concretos por departamento)\n"
+        "🎯 PRÓXIMAS 6H (3 prioridades de mayor impacto en ingresos)\n"
+        "REGLA: si no hubo movimiento real ni nada accionable, respondé exactamente: NADA NUEVO.\n\n"
+        f"INFORMES PREVIOS (no repitas):\n{hist}",
         max_tokens=1500)
     return texto
 
