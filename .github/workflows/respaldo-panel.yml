@@ -1,0 +1,32 @@
+name: Respaldo panel diario 8am
+
+# Duplicado del cron menuya-hq-panel en GitHub Actions.
+# SOLO actúa si Muse está caído (verifica /vigilante primero) -> no duplica envíos.
+# Corre 8:00am hora Costa Rica (14:00 UTC, sin horario de verano).
+
+on:
+  schedule:
+    - cron: '3 14 * * *'
+  workflow_dispatch:
+
+jobs:
+  respaldo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verificar si Muse está vivo
+        id: check
+        run: |
+          CODE=$(curl -s -m 30 -o /dev/null -w "%{http_code}" \
+            https://menuya-hq-bot-production.up.railway.app/vigilante || echo "000")
+          echo "vigilante HTTP $CODE"
+          echo "code=$CODE" >> $GITHUB_OUTPUT
+
+      - name: Enviar panel vía Railway
+        if: steps.check.outputs.code != '200'
+        run: |
+          echo "Muse caído -> respaldo activo: pidiendo /panel a Railway"
+          curl -s -m 300 -X POST https://menuya-hq-bot-production.up.railway.app/panel \
+            -H "X-Bridge-Secret: ${{ secrets.BRIDGE_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -d '{"oplog":"(panel de respaldo via GitHub Actions: el runtime de Muse no responde)"}'
+          echo; echo "panel de respaldo solicitado"
