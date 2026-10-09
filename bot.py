@@ -84,6 +84,33 @@ def cargar_acciones():
         pass
 
 
+# Colas de aprobación en lote (contenido + mensajes fríos). La VM las empuja vía POST /cola.
+# Formato: {"contenido": [{id, tipo, copy, imagen, estado}], "fria": [{id, negocio, zona, telefono, por_que, mensaje, mejor_hora, estado}]}
+# estado: pendiente/aprobado/rechazado
+COLAS = {"contenido": [], "fria": []}
+COLAS_FILE = f"{_ACC_DIR}/colas.json"
+
+
+def guardar_colas():
+    try:
+        with open(COLAS_FILE, "w") as f:
+            json.dump(COLAS, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+def cargar_colas():
+    global COLAS
+    try:
+        with open(COLAS_FILE) as f:
+            COLAS = json.load(f)
+        for k in ("contenido", "fria"):
+            COLAS.setdefault(k, [])
+        print(f"colas restauradas: {len(COLAS['contenido'])} posts, {len(COLAS['fria'])} mensajes", flush=True)
+    except Exception:
+        pass
+
+
 def estado_texto():
     return ESTADO["texto"]
 
@@ -668,6 +695,35 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self._json({"ok": True, "creados": creados, "saltados": saltados})
             except Exception as e:
                 print(f"prospeccion-push falló: {e}", flush=True)
+                self._json({"ok": False, "error": str(e)[:200]})
+        elif self.path == "/cola":
+            # La VM empuja las colas de aprobación en lote: {"contenido": [...], "fria": [...]}.
+            # Solo reemplaza las listas enviadas; preserva estados ya decididos por id.
+            try:
+                for clave in ("contenido", "fria"):
+                    nuevos = data.get(clave)
+                    if not isinstance(nuevos, list):
+                        continue
+                    viejos = {x.get("id"): x for x in COLAS.get(clave, []) if x.get("id") is not None}
+                    fusion = []
+                    for n in nuevos:
+                        nid = n.get("id")
+                        v = viejos.get(nid, {})
+                        est = v.get("estado", "pendiente")
+                        if est not in ("pendiente", "aprobado", "rechazado"):
+                            est = "pendiente"
+                        n["estado"] = est
+                        # preserva resultado de envío si ya se procesó
+                        for k in ("wa_accion_id", "wa_estado"):
+                            if k in v:
+                                n[k] = v[k]
+                        fusion.append(n)
+                    COLAS[clave] = fusion
+                guardar_colas()
+                print(f"cola actualizada: {len(COLAS['contenido'])} posts, {len(COLAS['fria'])} mensajes", flush=True)
+                self._json({"ok": True, "contenido": len(COLAS["contenido"]), "fria": len(COLAS["fria"])})
+            except Exception as e:
+                print(f"/cola falló: {e}", flush=True)
                 self._json({"ok": False, "error": str(e)[:200]})
         else:
             self._json({"error": "ruta desconocida"}, 404)
@@ -1332,6 +1388,7 @@ async def ayuda(interaction: discord.Interaction):
 
 
 cargar_acciones()
+cargar_colas()
 
 
 if __name__ == "__main__":
