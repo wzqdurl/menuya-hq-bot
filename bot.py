@@ -522,8 +522,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 print(f"expansión DM falló: {e}", flush=True)
                 self._json({"ok": False, "error": str(e)[:200]})
-        elif self.path == "/reporte-crecimiento":
-            # Reporte de crecimiento cada 6h: la coordinadora evalúa qué generó
+        elif self.path == "/reporte-crecimiento":            # Reporte de crecimiento cada 6h: la coordinadora evalúa qué generó
             # crecimiento real hacia la meta y qué sigue.
             if BOT_LOOP is None:
                 self._json({"ok": False, "error": "bot no listo"})
@@ -547,6 +546,17 @@ class BridgeHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 print(f"reporte-crecimiento TG falló: {e}", flush=True)
                 self._json({"ok": False, "error": str(e)[:200]})
+        elif self.path == "/prospectar":
+            # Prospección automática: devuelve JSON con negocios nuevos para HubSpot.
+            # El llamador pasa {"existentes": [nombres]} para evitar duplicados.
+            try:
+                existentes = data.get("existentes", [])
+                negocios = generar_prospeccion(existentes)
+                self._json({"ok": True, "negocios": negocios})
+            except Exception as e:
+                print(f"prospectar falló: {e}", flush=True)
+                self._json({"ok": False, "error": str(e)[:200]})
+        elif self.path == "/panel":
         elif self.path == "/panel":
             # Panel diario: la coordinadora sintetiza las últimas 24h con estado + log
             if BOT_LOOP is None:
@@ -821,8 +831,34 @@ def generar_expansion():
     return texto
 
 
-def generar_reporte_crecimiento():
-    """Reporte cada 6h: qué generó crecimiento real hacia la meta de ₡200k."""
+def generar_prospeccion(existentes):
+    """Devuelve lista JSON de negocios nuevos para prospectar.
+    Cada item: {nombre, canton, telefono, tipo, por_que}."""
+    roster_actual()
+    hoy = datetime.now().strftime("%Y-%m-%d %H:%M")
+    est = estado_texto()
+    excl = ", ".join(existentes[:50]) or "(ninguno aún)"
+    texto = dahl_chat(
+        DEPTOS["PROSPECCION"]["persona"] + f"\n\nFECHA ACTUAL: {hoy}\nESTADO REAL:\n{est}",
+        "Proponé 10 negocios REALES de Costa Rica (sodas, restaurantes, cafeterías, "
+        "pizzerías, panaderías) que podrían necesitar MenúYa CR y que NO estén en esta "
+        f"lista de ya contactados: {excl}.\n"
+        "Respondé SOLO con un JSON válido, sin texto antes ni después, con este formato:\n"
+        '[{"nombre": "...", "canton": "...", "telefono": "+506 .... .... o vacío", '
+        '"tipo": "soda/restaurante/cafetería/...", "por_que": "1 línea"}]',
+        max_tokens=2500)
+    # extraer el JSON aunque venga con texto alrededor
+    ini, fin = texto.find("["), texto.rfind("]") + 1
+    if ini < 0 or fin <= ini:
+        return []
+    try:
+        negocios = json.loads(texto[ini:fin])
+        return [n for n in negocios if isinstance(n, dict) and n.get("nombre")][:10]
+    except Exception:
+        return []
+
+
+def generar_reporte_crecimiento():    """Reporte cada 6h: qué generó crecimiento real hacia la meta de ₡200k."""
     roster_actual()
     hoy = datetime.now().strftime("%Y-%m-%d %H:%M")
     est = estado_texto()
