@@ -192,7 +192,7 @@ def dahl_chat(system: str, user: str, max_tokens: int = 1500) -> str:
         "max_tokens": max_tokens,
     }
     last_err = None
-    for intento in range(3):
+    for intento in range(4):
         try:
             req = urllib.request.Request(
                 DAHL_BASE + "/chat/completions",
@@ -205,10 +205,13 @@ def dahl_chat(system: str, user: str, max_tokens: int = 1500) -> str:
             return data["choices"][0]["message"]["content"].strip()
         except Exception as e:
             last_err = e
-            print(f"dahl intento {intento + 1} falló: {e} — reintentando", flush=True)
+            es_429 = "429" in str(e)
+            # 429 = límite de velocidad: esperar más tiempo
+            espera = 60 * (intento + 1) if es_429 else 5 * (intento + 1)
+            print(f"dahl intento {intento + 1} falló: {e} — esperando {espera}s", flush=True)
             import time
-            time.sleep(5 * (intento + 1))
-    raise RuntimeError(f"DAHL no respondió tras 3 intentos: {last_err}")
+            time.sleep(espera)
+    raise RuntimeError(f"DAHL no respondió tras 4 intentos: {last_err}")
 
 
 def _norm(s: str) -> str:
