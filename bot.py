@@ -457,6 +457,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self._json({"error": "ruta desconocida"}, 404)
 
     def do_GET(self):
+        if self.path == "/ping":
+            # público: solo dice "estoy vivo", sin datos sensibles (para vigilantes externos)
+            self._json({"ok": True, "servicio": "menuya-hq-bot"})
+            return
         if not self._auth():
             self._json({"error": "no autorizado"}, 403)
             return
