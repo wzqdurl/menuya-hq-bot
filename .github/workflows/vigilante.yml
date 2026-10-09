@@ -34,9 +34,10 @@ jobs:
         run: |
           git config user.name "menuya-watchdog"
           git config user.email "watchdog@menuya.cr"
+          git pull --rebase origin main --quiet || true
           git add metricas/heartbeat.jsonl docs/status.json
           git diff --cached --quiet || git commit -m "heartbeat $(date -u +%F-%T)"
-          git push
+          git push --quiet || git push --quiet
 
       - name: Abrir alerta si el bot no responde
         if: steps.check.outputs.code != '200'
