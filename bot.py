@@ -49,7 +49,11 @@ ACCIONES = []  # {id, tipo, destino, mensaje, estado: pendiente/aprobada/rechaza
 _ACCION_SEQ = 0
 BRIEFINGS = []  # últimos informes enviados (para no repetir)
 BOT_LOOP = None
-ACCIONES_FILE = "/tmp/acciones.json"
+# Cola de acciones: /data es el volumen persistente de Railway (sobrevive redeploys).
+# /tmp solo como respaldo si el volumen no está montado.
+import pathlib as _pl
+_ACC_DIR = "/data" if _pl.Path("/data").is_dir() else "/tmp"
+ACCIONES_FILE = f"{_ACC_DIR}/acciones.json"
 
 
 def guardar_acciones():
