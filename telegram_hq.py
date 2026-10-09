@@ -8,7 +8,7 @@ import logging
 import os
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
 import bot as hq  # noqa: F401  (lógica central: ejecutar_orden, dahl_chat, cola de acciones...)
 
@@ -259,6 +259,126 @@ async def enviar_panel_tg(texto: str):
     return True
 
 
+# ---------------- aprobación en lote ----------------
+
+def _pendientes_cola(clave):
+    return [x for x in hq.COLAS.get(clave, []) if x.get("estado") == "pendiente"]
+
+
+async def cmd_cola(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _es_jefe(update):
+        await _negar(update)
+        return
+    partes = ["📥 <b>Colas de aprobación</b>"]
+    posts = _pendientes_cola("contenido")
+    msgs = _pendientes_cola("fria")
+    if posts:
+        partes.append(f"\n<b>📝 Posts ({len(posts)} pendientes):</b>")
+        for p in posts:
+            partes.append(f"#{p['id']} [{p.get('tipo','')}] {p.get('fecha_programada','')} — {p.get('copy','')[:90]}…")
+    if msgs:
+        partes.append(f"\n<b>📲 Mensajes fríos ({len(msgs)} pendientes):</b>")
+        for m in msgs:
+            tel = m.get("telefono", "sin número")
+            partes.append(f"#{m['id']} {m.get('negocio','?')} ({m.get('zona','?')}) — {tel}\n<i>{m.get('mensaje','')[:90]}…</i>")
+    if not posts and not msgs:
+        partes.append("\n✅ Nada pendiente. Todo aprobado o rechazado.")
+    else:
+        partes.append("\nResponde <b>✅ todo</b> para aprobar todo, <b>✅ todo posts</b> / <b>✅ todo mensajes</b>, "
+                      "o <b>❌ #3, #7</b> para rechazar específicos.")
+    for trozo in _trocear("\n".join(partes)):
+        await update.message.reply_text(trozo, parse_mode="HTML")
+
+
+import re as _re
+
+def _parse_lote(texto):
+    """Devuelve (accion, alcance, ids). accion: aprobar/rechazar. alcance: todo/posts/mensajes/ids."""
+    t = texto.strip().lower()
+    aprobar = t.startswith("✅")
+    rechazar = t.startswith("❌")
+    if not (aprobar or rechazar):
+        return None
+    accion = "aprobar" if aprobar else "rechazar"
+    resto = t[1:].strip()
+    ids = [int(x) for x in _re.findall(r"#?(\d+)", resto)]
+    if "todo" in resto:
+        if "post" in resto:
+            return (accion, "posts", [])
+        if "mensaj" in resto:
+            return (accion, "mensajes", [])
+        return (accion, "todo", [])
+    if ids:
+        return (accion, "ids", ids)
+    return None
+
+
+async def on_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _es_jefe(update):
+        return
+    if not update.message or not update.message.text:
+        return
+    parsed = _parse_lote(update.message.text)
+    if not parsed:
+        return
+    accion, alcance, ids = parsed
+    nuevo_estado = "aprobado" if accion == "aprobar" else "rechazado"
+    tocados_posts, tocados_msgs = [], []
+    enviados_wa = 0
+
+    def _aplica(lista, idset=None):
+        n = 0
+        for x in lista:
+            if x.get("estado") != "pendiente":
+                continue
+            if idset is not None and x.get("id") not in idset:
+                continue
+            x["estado"] = nuevo_estado
+            n += 1
+        return n
+
+    if alcance == "todo":
+        tocados_posts = _aplica(hq.COLAS.get("contenido", []))
+        tocados_msgs = _aplica(hq.COLAS.get("fria", []))
+    elif alcance == "posts":
+        tocados_posts = _aplica(hq.COLAS.get("contenido", []))
+    elif alcance == "mensajes":
+        tocados_msgs = _aplica(hq.COLAS.get("fria", []))
+    else:  # ids específicos: buscar en ambas colas
+        idset = set(ids)
+        tocados_posts = _aplica(hq.COLAS.get("contenido", []), idset)
+        tocados_msgs = _aplica(hq.COLAS.get("fria", []), idset)
+
+    # Los mensajes fríos aprobados se convierten en acciones WhatsApp (las envía la VM por Baileys).
+    if nuevo_estado == "aprobado":
+        for m in hq.COLAS.get("fria", []):
+            if m.get("estado") == "aprobado" and not m.get("wa_accion_id"):
+                tel = "".join(c for c in str(m.get("telefono", "")) if c.isdigit())
+                if not tel:
+                    m["wa_estado"] = "sin_numero"
+                    continue
+                a = hq.queue_accion("whatsapp", tel, m["mensaje"])
+                m["wa_accion_id"] = a["id"]
+                m["wa_estado"] = "encolado"
+                enviados_wa += 1
+    hq.guardar_colas()
+
+    partes = []
+    if tocados_posts:
+        partes.append(f"📝 {tocados_posts} post(s) {nuevo_estado}s.")
+    if tocados_msgs:
+        partes.append(f"📲 {tocados_msgs} mensaje(s) {nuevo_estado}s.")
+    if enviados_wa:
+        partes.append(f"⏳ {enviados_wa} WhatsApp(s) encolados — la VM los envía en el próximo poll.")
+    if not partes:
+        await update.message.reply_text("No había pendientes con esos números.")
+        return
+    extra = ""
+    if nuevo_estado == "aprobado" and tocados_posts:
+        extra = "\n\n📌 Los posts aprobados NO se publican solos (ningún scheduler conectado aún). Copialos a Instagram/Facebook cuando quieras."
+    await update.message.reply_text("✅ " + " ".join(partes) + extra)
+
+
 def build_app():
     global _app
     if not TG_TOKEN:
@@ -273,5 +393,7 @@ def build_app():
     _app.add_handler(CommandHandler("ventas", _cmd_depto("ventas", "VENTAS")))
     _app.add_handler(CommandHandler("diseno", _cmd_depto("diseno", "DISENO")))
     _app.add_handler(CommandHandler("soporte", _cmd_depto("soporte", "SOPORTE")))
+    _app.add_handler(CommandHandler("cola", cmd_cola))
     _app.add_handler(CallbackQueryHandler(on_callback))
+    _app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_texto))
     return _app
