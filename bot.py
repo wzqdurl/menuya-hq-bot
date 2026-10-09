@@ -187,6 +187,49 @@ COORD = (CTX + " Eres la COORDINADORA general de MenúYa CR: lees el trabajo de 
 
 
 
+def groq_chat(system: str, user: str, max_tokens: int = 1500) -> str:
+    """Fallback Groq (gratis). Usa gpt-oss-20b con tokens amplios (es modelo reasoning)."""
+    key = os.environ.get("GROQ_KEY", "")
+    if not key:
+        raise RuntimeError("sin GROQ_KEY")
+    payload = {"model": "openai/gpt-oss-20b",
+               "messages": [{"role": "system", "content": system},
+                            {"role": "user", "content": user}],
+               "temperature": 0.7, "max_tokens": max(1200, max_tokens)}
+    req = urllib.request.Request(
+        "https://api.groq.com/openai/v1/chat/completions",
+        data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"})
+    with urllib.request.urlopen(req, timeout=120) as r:
+        data = json.load(r)
+    msg = data["choices"][0]["message"]
+    texto = (msg.get("content") or "").strip()
+    if not texto and msg.get("reasoning"):
+        texto = msg["reasoning"].strip()[-1500:]
+    if not texto:
+        raise RuntimeError("Groq sin contenido")
+    print("fallback Groq OK", flush=True)
+    return texto
+
+
+def gemini_chat(system: str, user: str, max_tokens: int = 1500) -> str:
+    """Fallback Gemini (gratis)."""
+    key = os.environ.get("GEMINI_KEY", "")
+    if not key:
+        raise RuntimeError("sin GEMINI_KEY")
+    payload = {"system_instruction": {"parts": [{"text": system}]},
+               "contents": [{"parts": [{"text": user}]}],
+               "generationConfig": {"maxOutputTokens": max_tokens, "temperature": 0.7}}
+    req = urllib.request.Request(
+        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key={key}",
+        data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=120) as r:
+        data = json.load(r)
+    texto = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+    print("fallback Gemini OK", flush=True)
+    return texto
+
+
 def openrouter_chat(system: str, user: str, max_tokens: int = 1500) -> str:
     """Fallback gratuito ($0) cuando DAHL no responde. Prueba modelos :free en cadena."""
     payload_base = {
@@ -249,11 +292,22 @@ def dahl_chat(system: str, user: str, max_tokens: int = 1500) -> str:
             print(f"dahl intento {intento + 1} falló: {e} — esperando {espera}s", flush=True)
             import time
             time.sleep(espera)
-    # DAHL agotado → fallback gratuito por OpenRouter (si hay key configurada)
+    # DAHL agotado → cadena de fallbacks gratuitos (OpenRouter → Groq → Gemini)
     if OPENROUTER_KEY:
         print("DAHL agotado, usando fallback OpenRouter", flush=True)
-        return openrouter_chat(system, user, max_tokens)
-    raise RuntimeError(f"DAHL no respondió tras 4 intentos: {last_err}")
+        try:
+            return openrouter_chat(system, user, max_tokens)
+        except Exception as e:
+            print(f"OpenRouter falló: {e}", flush=True)
+    try:
+        return groq_chat(system, user, max_tokens)
+    except Exception as e:
+        print(f"Groq falló: {e}", flush=True)
+    try:
+        return gemini_chat(system, user, max_tokens)
+    except Exception as e:
+        print(f"Gemini falló: {e}", flush=True)
+    raise RuntimeError(f"DAHL no respondió tras 4 intentos y fallbacks agotados: {last_err}")
 
 
 def _norm(s: str) -> str:
