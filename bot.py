@@ -321,22 +321,34 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 print(f"standup DM falló: {e}", flush=True)
                 self._json({"ok": False, "error": str(e)[:200]})
         elif self.path == "/expansion":
-            if BOT_LOOP is None:
-                self._json({"ok": False, "error": "bot no listo"})
-                return
+            import traceback
             try:
-                texto = generar_expansion()
-            except Exception as e:
-                print(f"expansión falló: {e}", flush=True)
-                self._json({"ok": False, "error": str(e)[:200]})
-                return
-            fut = asyncio.run_coroutine_threadsafe(enviar_expansion_dm(texto), BOT_LOOP)
-            try:
-                enviado = fut.result(timeout=120)
-                self._json({"ok": True, "enviado": enviado})
-            except Exception as e:
-                print(f"expansión DM falló: {e}", flush=True)
-                self._json({"ok": False, "error": str(e)[:200]})
+                print("expansion: inicio", flush=True)
+                if BOT_LOOP is None:
+                    self._json({"ok": False, "error": "bot no listo"})
+                    return
+                try:
+                    texto = generar_expansion()
+                except Exception as e:
+                    print(f"expansión falló: {e}", flush=True)
+                    self._json({"ok": False, "error": str(e)[:200]})
+                    return
+                print("expansion: texto generado, enviando DM", flush=True)
+                fut = asyncio.run_coroutine_threadsafe(enviar_expansion_dm(texto), BOT_LOOP)
+                try:
+                    enviado = fut.result(timeout=120)
+                    print(f"expansion: DM ok, respondiendo {enviado}", flush=True)
+                    self._json({"ok": True, "enviado": enviado})
+                    print("expansion: respuesta enviada", flush=True)
+                except Exception as e:
+                    print(f"expansión DM falló: {e}", flush=True)
+                    self._json({"ok": False, "error": str(e)[:200]})
+            except Exception:
+                traceback.print_exc()
+                try:
+                    self._json({"ok": False, "error": "excepción no capturada"})
+                except Exception:
+                    pass
         else:
             self._json({"error": "ruta desconocida"}, 404)
 
