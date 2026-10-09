@@ -161,6 +161,19 @@ def cargar_roster():
 
 DEPTOS = cargar_roster()
 _STANDUP_IDX = 0
+_ROSTER_TS = 0
+
+
+def roster_actual():
+    """Recarga el roster de GitHub si pasó más de 1h (para que las contrataciones entren solas)."""
+    global DEPTOS, _ROSTER_TS
+    import time
+    if time.time() - _ROSTER_TS > 3600:
+        nuevo = cargar_roster()
+        if nuevo:
+            DEPTOS = nuevo
+        _ROSTER_TS = time.time()
+    return DEPTOS
 COORD = (CTX + " Eres la COORDINADORA general de MenúYa CR: lees el trabajo de las áreas, detectas lo flojo, "
     "priorizas y entregas resumen ejecutivo con sugerencias concretas. Directa, sin rodeos. "
     "NUNCA digas 'la orden no se ejecutó': tu trabajo es producir el entregable con lo que haya.")
@@ -502,6 +515,7 @@ def parse_acciones(texto):
 
 
 def generar_briefing():
+    roster_actual()
     """La coordinadora decide si hay algo que valga la pena contarle al jefe."""
     hoy = datetime.now().strftime("%Y-%m-%d %H:%M")
     est = estado_texto()
@@ -551,6 +565,7 @@ MICRO_TAREAS = {
 
 
 def generar_standup():
+    roster_actual()
     """Rota departamentos: cada uno entrega un micro-resultado con el estado real."""
     global _STANDUP_IDX
     nombres = list(DEPTOS.keys())
@@ -576,6 +591,7 @@ def generar_standup():
 
 
 def generar_expansion():
+    roster_actual()
     """La coordinadora evalúa qué roles faltan y propone contrataciones."""
     hoy = datetime.now().strftime("%Y-%m-%d %H:%M")
     est = estado_texto()
