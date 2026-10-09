@@ -421,6 +421,38 @@ class BridgeHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 print(f"expansión DM falló: {e}", flush=True)
                 self._json({"ok": False, "error": str(e)[:200]})
+        elif self.path == "/panel":
+            # Panel diario: la coordinadora sintetiza las últimas 24h con estado + log
+            if BOT_LOOP is None:
+                self._json({"ok": False, "error": "bot no listo"})
+                return
+            oplog = data.get("oplog", "")
+            try:
+                hoy = datetime.now().strftime("%Y-%m-%d %H:%M")
+                est = estado_texto()
+                texto = dahl_chat(
+                    COORD + f"\n\nFECHA ACTUAL: {hoy}\nESTADO REAL DEL NEGOCIO:\n{est}",
+                    "Generá el PANEL DIARIO para el jefe (Durling). Máximo 1800 caracteres, "
+                    "formato claro con estas secciones:\n"
+                    "📊 MÉTRICAS (ingresos, faltante para ₡200k, días al 31-oct, ritmo)\n"
+                    "✅ AYER/HOY (qué hizo cada departamento, tareas completadas)\n"
+                    "🔎 OPORTUNIDADES (leads, propuestas)\n"
+                    "⚠️ BLOQUEOS (qué está parado y por qué)\n"
+                    "🎯 PRÓXIMOS PASOS (3 acciones concretas)\n"
+                    "Tono directo, tico. Log de operaciones últimas 24h:\n" + oplog[:3000],
+                    max_tokens=2000)
+            except Exception as e:
+                print(f"panel falló: {e}", flush=True)
+                self._json({"ok": False, "error": str(e)[:200]})
+                return
+            fut = asyncio.run_coroutine_threadsafe(enviar_dm_boss(
+                "📋 **Panel diario MenúYa CR**\n\n" + texto, StandupOrdenView()), BOT_LOOP)
+            try:
+                fut.result(timeout=120)
+                self._json({"ok": True, "enviado": True})
+            except Exception as e:
+                print(f"panel DM falló: {e}", flush=True)
+                self._json({"ok": False, "error": str(e)[:200]})
         else:
             self._json({"error": "ruta desconocida"}, 404)
 
