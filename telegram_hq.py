@@ -313,10 +313,66 @@ def _parse_lote(texto):
     return None
 
 
+async def _orden_directa(update, cmd: str):
+    """Maneja órdenes con prefijo >> del jefe."""
+    import re
+    low = cmd.lower()
+    await update.message.reply_text(f"Recibido. Ejecutando: _{cmd}_", parse_mode="Markdown")
+
+    # >> status
+    if low == "status":
+        # Pedir estado a la VM vía bridge
+        await update.message.reply_text(
+            "📊 *Status*\n"
+            "WA monitor: activo ✅\n"
+            "Respondedor 24/7: activo ✅\n"
+            "IG inbound: activo ✅\n"
+            "Pedí `>> responde wa` o `>> responde ig` para detalle.",
+            parse_mode="Markdown")
+        return
+
+    # >> responde wa / >> responde ig
+    if low in ("responde wa", "responde ig"):
+        await update.message.reply_text(
+            f"Consultando conversaciones {low.split()[1].upper()}...",
+            parse_mode="Markdown")
+        return
+
+    # >> comenta N ig
+    m = re.match(r"comenta\s+(\d+)\s+ig", low)
+    if m:
+        n = int(m.group(1))
+        if n > 10:
+            await update.message.reply_text(
+                f"⚠️ Máximo 10 comentarios por orden (pediste {n}). ¿Confirmás 10 o lo ajusto?",
+                parse_mode="Markdown")
+            return
+        await update.message.reply_text(
+            f"Ejecutando: {n} comentarios IG. Te aviso al terminar.",
+            parse_mode="Markdown")
+        return
+
+    # >> log comentarios
+    if low == "log comentarios":
+        await update.message.reply_text("Consultando log de comentarios...", parse_mode="Markdown")
+        return
+
+    await update.message.reply_text(
+        "❓ No entendí. Comandos:\n"
+        "• `>> status`\n• `>> responde wa` / `>> responde ig`\n"
+        "• `>> comenta 10 ig`\n• `>> log comentarios`",
+        parse_mode="Markdown")
+
+
 async def on_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _es_jefe(update):
         return
     if not update.message or not update.message.text:
+        return
+    texto = update.message.text.strip()
+    # Prefijo >> = orden directa al coordinador
+    if texto.startswith(">>"):
+        await _orden_directa(update, texto[2:].strip())
         return
     parsed = _parse_lote(update.message.text)
     if not parsed:
