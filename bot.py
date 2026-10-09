@@ -39,6 +39,8 @@ ESTADO = {
 }
 ACCIONES = []  # {id, tipo, destino, mensaje, estado: pendiente/aprobada/rechazada/ejecutada/fallida, resultado}
 _ACCION_SEQ = 0
+BRIEFINGS = []  # últimos informes enviados (para no repetir)
+BOT_LOOP = None
 
 
 def estado_texto():
@@ -177,18 +179,7 @@ def ejecutar_orden(orden: str):
         "Solo propone acciones útiles y concretas. Directa, sin rodeos.",
         max_tokens=2000,
     )
-    acciones = []
-    for line in final.splitlines():
-        s = line.strip()
-        if s.upper().startswith("ACCION:"):
-            try:
-                _, resto = s.split(":", 1)
-                _, numero, mensaje = [x.strip() for x in resto.split("|", 2)]
-                numero = "".join(c for c in numero if c.isdigit())
-                if numero and mensaje:
-                    acciones.append({"tipo": "whatsapp", "destino": numero, "mensaje": mensaje})
-            except ValueError:
-                continue
+    acciones = parse_acciones(final)
     return final, acciones
 
 
@@ -238,6 +229,29 @@ class BridgeHandler(BaseHTTPRequestHandler):
                     print(f"puente: acción {aid} -> {a['estado']}", flush=True)
                     break
             self._json({"ok": True})
+        elif self.path == "/briefing":
+            try:
+                texto = generar_briefing()
+            except Exception as e:
+                print(f"briefing falló: {e}", flush=True)
+                self._json({"ok": False, "error": str(e)[:200]})
+                return
+            if "NADA NUEVO" in texto.upper():
+                print("briefing: nada nuevo, silencio", flush=True)
+                self._json({"ok": True, "enviado": False})
+                return
+            acciones = parse_acciones(texto)
+            if BOT_LOOP is None:
+                print("briefing: bot aún no listo", flush=True)
+                self._json({"ok": False, "error": "bot no listo"})
+                return
+            fut = asyncio.run_coroutine_threadsafe(enviar_briefing_dm(texto, acciones), BOT_LOOP)
+            try:
+                fut.result(timeout=120)
+                self._json({"ok": True, "enviado": True, "acciones": len(acciones)})
+            except Exception as e:
+                print(f"briefing DM falló: {e}", flush=True)
+                self._json({"ok": False, "error": str(e)[:200]})
         else:
             self._json({"error": "ruta desconocida"}, 404)
 
@@ -298,6 +312,8 @@ async def on_guild_join(guild):
 
 @bot.event
 async def on_ready():
+    global BOT_LOOP
+    BOT_LOOP = asyncio.get_running_loop()
     print(f"HQ: conectado como {bot.user}", flush=True)
 
 
@@ -346,6 +362,120 @@ def queue_accion(tipo, destino, mensaje):
          "estado": "pendiente", "resultado": ""}
     ACCIONES.append(a)
     return a
+
+
+def parse_acciones(texto):
+    accs = []
+    for line in texto.splitlines():
+        s = line.strip()
+        if s.upper().startswith("ACCION:"):
+            try:
+                _, resto = s.split(":", 1)
+                _, numero, mensaje = [x.strip() for x in resto.split("|", 2)]
+                numero = "".join(c for c in numero if c.isdigit())
+                if numero and mensaje:
+                    accs.append({"tipo": "whatsapp", "destino": numero, "mensaje": mensaje})
+            except ValueError:
+                continue
+    return accs
+
+
+def generar_briefing():
+    """La coordinadora decide si hay algo que valga la pena contarle al jefe."""
+    hoy = datetime.now().strftime("%Y-%m-%d %H:%M")
+    est = estado_texto()
+    hist = "\n---\n".join(BRIEFINGS[-3:]) or "(primer informe)"
+    texto = dahl_chat(
+        COORD + f"\n\nFECHA ACTUAL: {hoy}\nESTADO REAL DEL NEGOCIO:\n{est}",
+        "Sos la coordinadora y le vas a escribir un informe CORTO al jefe (Durling) por DM. "
+        "Máximo 1200 caracteres. Tono directo, tico, sin rodeos.\n"
+        "Contenido: 1) qué cambió o qué necesita decisión YA, 2) una sugerencia concreta para avanzar "
+        "a la meta de ₡200,000, 3) si proponés acciones reales (ej: mandar WhatsApp a un lead), "
+        "terminalas con líneas exactas así:\n"
+        "ACCION: whatsapp | <numero con código país> | <mensaje completo>\n"
+        "REGLA DE ORO: si desde el último informe no hay nada nuevo ni accionable, respondé "
+        "exactamente: NADA NUEVO (sin nada más).\n\n"
+        f"ÚLTIMOS INFORMES (no repitas):\n{hist}",
+        max_tokens=1200)
+    return texto
+
+
+async def enviar_briefing_dm(texto, acciones):
+    user = await bot.fetch_user(BOSS_ID)
+    limpio = texto
+    idx = limpio.upper().find("ACCION:")
+    if idx >= 0:
+        # cortar desde la primera línea ACCION
+        lineas = limpio.splitlines()
+        limpio = "\n".join(l for l in lineas if not l.strip().upper().startswith("ACCION:")).rstrip()
+    BRIEFINGS.append(limpio[:800])
+    view = BriefingView(acciones) if acciones else None
+    msg = f"📋 **Informe de la coordinadora**\n\n{limpio[:1800]}"
+    if acciones:
+        msg += f"\n\n👆 Hay {len(acciones)} acción(es) propuesta(s) abajo."
+    await user.send(msg, view=view)
+    # si no hay botones, igual mandar las acciones como propuestas aprobables
+    for ac in acciones:
+        a = queue_accion(ac["tipo"], ac["destino"], ac["mensaje"])
+        await user.send(
+            f"📲 **Acción propuesta** — WhatsApp al `+{a['destino']}`:\n> {a['mensaje'][:500]}",
+            view=AccionView(a))
+    print(f"briefing enviado al jefe ({len(acciones)} acciones)", flush=True)
+
+
+class BriefingView(discord.ui.View):
+    def __init__(self, acciones):
+        super().__init__(timeout=86400)
+        self.acciones = acciones
+
+    @discord.ui.button(label="✅ Ejecutar plan", style=discord.ButtonStyle.green)
+    async def ejecutar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not is_boss(interaction):
+            await interaction.response.send_message("⛔ Solo el jefe.", ephemeral=True)
+            return
+        n = 0
+        for ac in self.acciones:
+            a = queue_accion(ac["tipo"], ac["destino"], ac["mensaje"])
+            a["estado"] = "aprobada"
+            n += 1
+        button.disabled = True
+        self.children[1].disabled = True
+        await interaction.response.edit_message(
+            content=f"✅ Plan en marcha — {n} acción(es) aprobadas, se ejecutan solas.", view=self)
+
+    @discord.ui.button(label="✏️ Ordenar algo", style=discord.ButtonStyle.blurple)
+    async def ordenar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not is_boss(interaction):
+            await interaction.response.send_message("⛔ Solo el jefe.", ephemeral=True)
+            return
+        await interaction.response.send_modal(OrdenModal())
+
+
+class OrdenModal(discord.ui.Modal, title="Orden para la empresa"):
+    orden = discord.ui.TextInput(label="¿Qué ordenás?", style=discord.TextStyle.paragraph,
+                                 max_length=500, placeholder="Ej: mandale un recordatorio a Delicias del Puerto")
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if not is_boss(interaction):
+            await interaction.response.send_message("⛔ Solo el jefe.", ephemeral=True)
+            return
+        await interaction.response.defer()
+        try:
+            resultado, acciones = await asyncio.to_thread(ejecutar_orden, str(self.orden.value))
+            post_webhook("📋 Orden del jefe (desde informe)",
+                         f"_Orden: {self.orden.value}_\n\n{resultado}")
+            limpio = resultado
+            idx = limpio.upper().find("ACCIONES PROPUESTAS")
+            if idx >= 0:
+                limpio = limpio[:idx].rstrip()
+            await interaction.followup.send(f"✅ **Orden ejecutada.**\n\n{limpio[:1700]}")
+            for ac in acciones:
+                a = queue_accion(ac["tipo"], ac["destino"], ac["mensaje"])
+                await interaction.followup.send(
+                    f"📲 **Acción propuesta** — WhatsApp al `+{a['destino']}`:\n> {a['mensaje'][:500]}",
+                    view=AccionView(a))
+        except Exception as e:
+            await interaction.followup.send(f"😕 Falló la orden: {str(e)[:300]}")
 
 
 @bot.tree.command(name="jefe", description="Dar una orden a la coordinadora (la reparte al equipo)")
