@@ -17,7 +17,7 @@ import json
 import os
 import threading
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import discord
@@ -415,6 +415,11 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if self.path == "/estado":
             ESTADO["texto"] = data.get("texto", "")
             ESTADO["actualizado"] = datetime.now().isoformat(timespec="minutes")
+            try:
+                with open(f"{_ACC_DIR}/ultimo_push.txt", "w") as f:
+                    f.write(datetime.now(timezone.utc).isoformat())
+            except Exception as e:
+                print(f"vigilante: no se pudo persistir push: {e}", flush=True)
             print(f"puente: estado actualizado ({len(ESTADO['texto'])} chars)", flush=True)
             self._json({"ok": True})
         elif self.path == "/acciones/resultado":
@@ -592,10 +597,97 @@ class BridgeHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 print(f"panel DM falló: {e}", flush=True)
                 self._json({"ok": False, "error": str(e)[:200]})
+        elif self.path == "/alerta-vigilante":
+            # Lo usa el vigilante externo (GitHub Actions): manda Telegram sin depender de Muse.
+            if BOT_LOOP is None:
+                self._json({"ok": False, "error": "bot no listo"})
+                return
+            texto = data.get("texto", "🚨 Alerta del vigilante externo.")
+            fut = asyncio.run_coroutine_threadsafe(
+                telegram_hq.tg_send(texto[:3500]), BOT_LOOP)
+            try:
+                fut.result(timeout=60)
+                self._json({"ok": True, "enviado": True})
+            except Exception as e:
+                print(f"alerta-vigilante falló: {e}", flush=True)
+                self._json({"ok": False, "error": str(e)[:200]})
+        elif self.path == "/heartbeat":
+            # Heartbeat horario vía GitHub Actions (respaldo si Muse cae).
+            if BOT_LOOP is None:
+                self._json({"ok": False, "error": "bot no listo"})
+                return
+            ahora = datetime.now().strftime("%Y-%m-%d %H:%M")
+            msg = (f"💓 <b>Heartbeat MenúYa HQ</b> — {ahora}\n"
+                   f"Bot y Railway operativos. Acciones en cola: {len(ACCIONES)}. "
+                   f"Último estado de la VM: {ESTADO['actualizado'] or 'pendiente'}.")
+            fut = asyncio.run_coroutine_threadsafe(telegram_hq.tg_send(msg), BOT_LOOP)
+            try:
+                fut.result(timeout=60)
+                self._json({"ok": True, "enviado": True})
+            except Exception as e:
+                print(f"heartbeat TG falló: {e}", flush=True)
+                self._json({"ok": False, "error": str(e)[:200]})
+        elif self.path == "/prospeccion-push":
+            # Prospección diaria vía GitHub Actions: genera negocios y los crea en HubSpot.
+            hs_key = os.environ.get("HUBSPOT_KEY", "")
+            if not hs_key:
+                self._json({"ok": False, "error": "sin HUBSPOT_KEY"})
+                return
+            def _hs(path, payload=None, method="GET"):
+                req = urllib.request.Request(
+                    "https://api.hubapi.com" + path,
+                    data=json.dumps(payload).encode() if payload else None,
+                    headers={"Authorization": f"Bearer {hs_key}",
+                             "Content-Type": "application/json"},
+                    method=method)
+                with urllib.request.urlopen(req, timeout=30) as r:
+                    return json.load(r)
+            try:
+                existentes = set()
+                r = _hs("/crm/v3/objects/contacts?properties=firstname,lastname&limit=100")
+                for c in r.get("results", []):
+                    p = c.get("properties", {})
+                    existentes.add(f"{p.get('firstname','')} {p.get('lastname','')}".strip().lower())
+                negocios = generar_prospeccion(sorted(existentes)[:50])
+                creados, saltados = 0, 0
+                for n in negocios:
+                    nombre = (n.get("nombre") or "").strip()
+                    if not nombre or nombre.lower() in existentes:
+                        saltados += 1
+                        continue
+                    _hs("/crm/v3/objects/contacts", {"properties": {
+                        "firstname": nombre,
+                        "phone": n.get("telefono", ""),
+                        "city": n.get("canton", ""),
+                        "hs_lead_status": "NEW",
+                        "notes": f"⚠️ POR VERIFICAR — Prospección automática MenúYa CR "
+                                 f"({n.get('tipo','')}, {n.get('canton','')}). {n.get('por_que','')}",
+                    }}, method="POST")
+                    creados += 1
+                    existentes.add(nombre.lower())
+                self._json({"ok": True, "creados": creados, "saltados": saltados})
+            except Exception as e:
+                print(f"prospeccion-push falló: {e}", flush=True)
+                self._json({"ok": False, "error": str(e)[:200]})
         else:
             self._json({"error": "ruta desconocida"}, 404)
 
     def do_GET(self):
+        if self.path == "/vigilante":
+            # Público: lo usa el vigilante externo (GitHub Actions) para saber si
+            # el runtime de Muse sigue vivo. 200 = push reciente (<30 min), 503 = caído.
+            hace_s = None
+            try:
+                with open(f"{_ACC_DIR}/ultimo_push.txt") as f:
+                    ts = datetime.fromisoformat(f.read().strip())
+                hace_s = (datetime.now(timezone.utc) - ts).total_seconds()
+            except Exception:
+                pass
+            vivo = hace_s is not None and hace_s < 1800
+            self._json({"ok": vivo, "muse_vivo": vivo,
+                        "ultimo_push_hace_s": int(hace_s) if hace_s else None},
+                       200 if vivo else 503)
+            return
         if self.path == "/ping":
             # público: solo dice "estoy vivo", sin datos sensibles (para vigilantes externos)
             self._json({"ok": True, "servicio": "menuya-hq-bot"})
@@ -776,7 +868,7 @@ def parse_contrataciones(texto):
 
 
 MICRO_TAREAS = {
-    "PROSPECCION": "Propón 10 negocios NUEVOS para prospectar (mínimo 10, no menos). Por cada uno: nombre o 'por verificar', cantón, por qué encaja con MenúYa CR y primer mensaje de WhatsApp corto, tico, 'nosotros', SIN precio. Varía las zonas de Costa Rica.",
+    "PROSPECCION": "Propón 10 negocios NUEVOS para prospectar (mínimo 10, no menos). Por cada uno: nombre o 'por verificar', cantón, por qué encaja con MenúYa CR y primer mensaje de WhatsApp corto, tico, 'nosotros', SIN precio. Varía las zonas de Costa Rica. REGLA DE ORO: jamás vendas 'un QR' — a nadie le emociona un QR, el QR es solo el mecanismo. Todo primer mensaje vende el RESULTADO con esta estructura: 1) el dolor del negocio (clientes que se van por esperar, hora pico colapsada, pedidos que se pierden), 2) el resultado (más pedidos, atención más rápida, cero clientes perdidos), 3) el mecanismo en media línea (menú QR + pedidos por WhatsApp), 4) pregunta que invite a responder.",
     "CIERRES": "Redactá el mensaje de seguimiento de hoy para el lead caliente más frío (el que lleva más días sin responder). Corto, tico, precio al final solo si ya lo conoce, termina con pregunta.",
     "CONTENIDO": "Redactá 1 post para hoy (copy máx 280 caracteres + idea visual que muestre el producto).",
     "FINANZAS": "Dame el corte de hoy en 4 líneas: ingresos, faltante, días restantes, meta diaria y cuántos clientes faltan.",
@@ -848,7 +940,9 @@ def generar_prospeccion(existentes):
         f"lista de ya contactados: {excl}.\n"
         "Respondé SOLO con un JSON válido, sin texto antes ni después, con este formato:\n"
         '[{"nombre": "...", "canton": "...", "telefono": "+506 .... .... o vacío", '
-        '"tipo": "soda/restaurante/cafetería/...", "por_que": "1 línea"}]',
+        '"tipo": "soda/restaurante/cafetería/...", "por_que": "1 línea"}]\n'
+        "El campo por_que debe describir el RESULTADO que le vendemos (más pedidos, menos espera, "
+        "cero clientes perdidos), no el producto: jamás digas 'porque necesita un QR'.",
         max_tokens=2500)
     # extraer el JSON aunque venga con texto alrededor
     ini, fin = texto.find("["), texto.rfind("]") + 1
