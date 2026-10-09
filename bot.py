@@ -557,7 +557,6 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 print(f"prospectar falló: {e}", flush=True)
                 self._json({"ok": False, "error": str(e)[:200]})
         elif self.path == "/panel":
-        elif self.path == "/panel":
             # Panel diario: la coordinadora sintetiza las últimas 24h con estado + log
             if BOT_LOOP is None:
                 self._json({"ok": False, "error": "bot no listo"})
@@ -858,7 +857,8 @@ def generar_prospeccion(existentes):
         return []
 
 
-def generar_reporte_crecimiento():    """Reporte cada 6h: qué generó crecimiento real hacia la meta de ₡200k."""
+def generar_reporte_crecimiento():
+    """Reporte cada 6h: qué generó crecimiento real hacia la meta de ₡200k."""
     roster_actual()
     hoy = datetime.now().strftime("%Y-%m-%d %H:%M")
     est = estado_texto()
