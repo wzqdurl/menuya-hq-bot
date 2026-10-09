@@ -17,7 +17,7 @@ jobs:
       - name: Chequear salud del bot
         id: check
         run: |
-          RESP=$(curl -s -m 30 -w "\n%{http_code}" https://menuya-hq-bot-production.up.railway.app/salud || echo -e "\n000")
+          RESP=$(curl -s -m 30 -w "\n%{http_code}" https://menuya-hq-bot-production.up.railway.app/ping || echo -e "\n000")
           CODE=$(echo "$RESP" | tail -1)
           BODY=$(echo "$RESP" | head -n -1)
           echo "HTTP $CODE :: $BODY"
