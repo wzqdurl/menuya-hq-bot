@@ -706,16 +706,18 @@ def generar_orquestacion():
     nombres = ", ".join(DEPTOS.keys())
     texto = dahl_chat(
         COORD + f"\n\nFECHA ACTUAL: {hoy}\nESTADO REAL DEL NEGOCIO:\n{est}",
-        "Sos el GERENTE AUTÓNOMO. Evaluá estos DISPARADORES contra el ESTADO REAL y emití órdenes "
-        "solo para los que apliquen:\n"
-        "1) INBOX: hay mensajes nuevos de leads sin responder → ordená a CIERRES redactar la respuesta.\n"
-        "2) FRÍO: un lead caliente lleva 3+ días sin responder → ordená a SEGUIMIENTO el rescate.\n"
-        "3) PROSPECCIÓN: hoy no se propusieron negocios nuevos → ordená a PROSPECCION (10 negocios) o INVESTIGADOR (5 verificados).\n"
-        "4) CONTENIDO: hoy no hay post propuesto → ordená a CONTENIDO.\n"
-        "5) CÁLCULO: los números cambiaron o nunca se calcularon hoy → ordená a FINANZAS.\n"
-        "Formato por orden (una línea cada una):\nORDEN: <DEPARTAMENTO> | <tarea concreta en 1 línea>\n"
+        "Sos el GERENTE AUTÓNOMO. El ESTADO incluye FLUJO DE LEADS con etapas y VENCIDOS HOY. "
+        "Tu trabajo: emitir órdenes de ejecución inmediata.\n"
+        "PRIORIDAD 1 — VENCIDOS HOY: por cada lead vencido, ordená al departamento indicado la acción debida. "
+        "Incluí el teléfono del lead en la tarea.\n"
+        "PRIORIDAD 2 — DISPARADORES (solo si aplican):\n"
+        "1) INBOX: mensajes nuevos de leads sin responder → CIERRES redacta respuesta.\n"
+        "2) PROSPECCIÓN: hoy no se propusieron negocios nuevos → PROSPECCION (10) o INVESTIGADOR (5).\n"
+        "3) CONTENIDO: hoy no hay post → CONTENIDO.\n"
+        "4) CÁLCULO: números desactualizados → FINANZAS.\n"
+        "Formato por orden (una línea cada una):\nORDEN: <DEPARTAMENTO> | <tarea concreta en 1 línea, con teléfono si es un lead>\n"
         f"Departamentos: {nombres}. Máximo 3 órdenes por ciclo. "
-        "Si ningún disparador aplica, respondé exactamente: SIN ORDENES.",
+        "Si nada vence ni aplica, respondé exactamente: SIN ORDENES.",
         max_tokens=800)
     return texto
 
