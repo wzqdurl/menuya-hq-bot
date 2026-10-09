@@ -57,21 +57,20 @@ CTX = (
     "NO inventas clientes, ventas ni números. Si no hay dato, dilo."
 )
 
-DEPTOS = {
-    "PROSPECCION": CTX + " Eres la cazadora de clientes: propones negocios nuevos para contactar "
-        "(sodas, cafeterías, pizzerías de Costa Rica; varía zonas) con cantón, por qué encaja y primer "
-        "mensaje de WhatsApp corto, tico, 'nosotros', SIN precio. Marca con 'por verificar' lo que inventes.",
-    "CIERRES": CTX + " Eres la cerradora: conviertes leads calientes en clientes que paguen el 50%. "
-        "Mensajes cortos, urgencia honesta, el precio va AL FINAL, terminas con pregunta que invite a "
-        "responder. Usas el ESTADO para saber quiénes son los leads calientes y qué se les dijo.",
-    "CONTENIDO": CTX + " Eres la community manager de @menuya.cr (IG/FB). Creas posts que venden "
-        "soluciones (más pedidos, menos espera). Copy corto + idea visual; la imagen muestra el producto.",
-    "FINANZAS": CTX + " Eres la contadora: números exactos del ESTADO. Calculas faltante para ₡200k, "
-        "días restantes al 7-nov-2026, meta diaria y clientes necesarios por ticket (₡10k/₡20k/₡25k).",
-}
-COORD = (CTX + " Eres la COORDINADORA general de MenúYa CR: lees el trabajo de las áreas, detectas lo flojo, "
-    "priorizas y entregas resumen ejecutivo con sugerencias concretas. Directa, sin rodeos. "
-    "NUNCA digas 'la orden no se ejecutó': tu trabajo es producir el entregable con lo que haya.")
+CTX = (
+    "MenúYa CR: empresa que vende soluciones digitales de pago único a sodas y restaurantes "
+    "pequeños de Costa Rica. Suite: menú QR ₡15k, menú+pedidos WhatsApp ₡25k, Google Maps ₡10k, "
+    "WA Business ₡12k, web una página ₡20k, catálogo QR ₡15k, cliente frecuente QR ₡18k, "
+    "reservaciones ₡15k, tarjetas regalo ₡12k, facturación electrónica ₡20k, reseñas automáticas ₡8k. "
+    "Primeros 10 clientes: básico ₡10k / completo ₡20k. Cobro 50% adelanto / 50% entrega por SINPE móvil. "
+    "META: ₡200,000 en 30 días (8-oct al 7-nov-2026). Español tico, voz 'nosotros', sin hype. "
+    "NO inventas clientes, ventas ni números. Si no hay dato, dilo."
+)
+
+# ROSTER DINÁMICO: se carga de roster.json en el repo (la VM agrega contrataciones).
+# Formato: {"departamentos": [{"nombre": "PROSPECCION", "display": "PROSPECCIÓN",
+#                              "area": "estrategia", "persona": "..."}]}
+ROSTER_URL = "https://raw.githubusercontent.com/wzqdurl/menuya-hq-bot/main/roster.json"
 
 PERSONAS = {
     "VENTAS": "Vendedora de MenúYa CR (voz plural 'nosotros', español tico amable). Conoces la suite de pago "
@@ -90,6 +89,54 @@ PERSONAS = {
         "concretas. Conoces los productos y precios de la suite. Si algo se dañó, das pasos para arreglarlo. "
         "Escalas a Durling solo lo que no puedes resolver. Tono paciente, español claro, sin tecnicismos.",
 }
+
+_BUILTIN = [
+    ("PROSPECCION", "PROSPECCIÓN", "estrategia",
+     CTX + " Eres la cazadora de clientes: propones negocios nuevos para contactar "
+     "(sodas, cafeterías, pizzerías de Costa Rica; varía zonas) con cantón, por qué encaja y primer "
+     "mensaje de WhatsApp corto, tico, 'nosotros', SIN precio. Marca con 'por verificar' lo que inventes."),
+    ("CIERRES", "CIERRES", "estrategia",
+     CTX + " Eres la cerradora: conviertes leads calientes en clientes que paguen el 50%. "
+     "Mensajes cortos, urgencia honesta, el precio va AL FINAL, terminas con pregunta que invite a "
+     "responder. Usas el ESTADO para saber quiénes son los leads calientes y qué se les dijo."),
+    ("CONTENIDO", "CONTENIDO", "estrategia",
+     CTX + " Eres la community manager de @menuya.cr (IG/FB). Creas posts que venden "
+     "soluciones (más pedidos, menos espera). Copy corto + idea visual; la imagen muestra el producto."),
+    ("FINANZAS", "FINANZAS", "estrategia",
+     CTX + " Eres la contadora: números exactos del ESTADO. Calculas faltante para ₡200k, "
+     "días restantes al 7-nov-2026, meta diaria y clientes necesarios por ticket (₡10k/₡20k/₡25k)."),
+    ("VENTAS", "VENTAS", "ejecucion", PERSONAS["VENTAS"] + " " + CTX),
+    ("DISENO", "DISENO", "ejecucion", PERSONAS["DISENO"] + " " + CTX),
+    ("SOPORTE", "SOPORTE", "ejecucion", PERSONAS["SOPORTE"] + " " + CTX),
+]
+
+
+def cargar_roster():
+    """Lee roster.json del repo; si falla, usa el built-in."""
+    deptos = {}
+    try:
+        req = urllib.request.Request(ROSTER_URL, headers={"User-Agent": "menuya-hq"})
+        data = json.load(urllib.request.urlopen(req, timeout=20))
+        for d in data.get("departamentos", []):
+            deptos[d["nombre"]] = {"display": d.get("display", d["nombre"]),
+                                   "area": d.get("area", "estrategia"),
+                                   "persona": CTX + " " + d["persona"]}
+        print(f"roster: {len(deptos)} departamentos desde GitHub", flush=True)
+    except Exception as e:
+        print(f"roster GitHub falló ({e}), usando built-in", flush=True)
+    if not deptos:
+        for nombre, display, area, persona in _BUILTIN:
+            deptos[nombre] = {"display": display, "area": area, "persona": persona}
+    return deptos
+
+
+DEPTOS = cargar_roster()
+_STANDUP_IDX = 0
+COORD = (CTX + " Eres la COORDINADORA general de MenúYa CR: lees el trabajo de las áreas, detectas lo flojo, "
+    "priorizas y entregas resumen ejecutivo con sugerencias concretas. Directa, sin rodeos. "
+    "NUNCA digas 'la orden no se ejecutó': tu trabajo es producir el entregable con lo que haya.")
+
+
 
 
 def dahl_chat(system: str, user: str, max_tokens: int = 1500) -> str:
@@ -132,21 +179,24 @@ def ejecutar_orden(orden: str):
     """Devuelve (resultado_final, lista_de_acciones)."""
     hoy = datetime.now().strftime("%Y-%m-%d %H:%M")
     est = estado_texto()
+    nombres = ", ".join(DEPTOS.keys())
     desglose = dahl_chat(
         COORD + f"\n\nFECHA ACTUAL: {hoy}\nESTADO REAL DEL NEGOCIO:\n{est}",
         f"El jefe (Durling) dio esta ORDEN: '{orden}'. Desglósala en instrucciones concretas y cortas "
-        "para los empleados que hagan falta de esta lista: PROSPECCION, CIERRES, CONTENIDO, FINANZAS. "
+        f"para los empleados que hagan falta de esta lista: {nombres}. "
         "Usa el ESTADO REAL: si un lead ya fue contactado, no pidas contactarlo de nuevo; propone el "
         "siguiente paso real. Formato por empleado: 'PROSPECCION: <instrucciones>' o 'PROSPECCION: NADA'.",
         max_tokens=800,
     )
     partes = []
     matched_any = False
-    for nombre, persona in DEPTOS.items():
+    for nombre, info in DEPTOS.items():
+        persona = info["persona"]
+        display = info["display"]
         instr = ""
         for line in desglose.splitlines():
             head = line.split(":", 1)[0] if ":" in line else ""
-            if _norm(nombre) in _norm(head):
+            if _norm(nombre) in _norm(head) or _norm(display) in _norm(head):
                 instr = line.split(":", 1)[1].strip()
                 break
         if not instr or "NADA" in _norm(instr):
@@ -157,17 +207,17 @@ def ejecutar_orden(orden: str):
             f"Instrucciones de la coordinadora: {instr}\n\nEjecútalas con el ESTADO REAL y entrega "
             "solo tu parte, completa y lista para usar. Concreta: nombres, números, mensajes listos.",
             max_tokens=1500)
-        partes.append(f"### {nombre}\n{parte}")
+        partes.append(f"### {display}\n{parte}")
     if not matched_any:
         # fallback: todos trabajan la orden directo
-        for nombre, persona in DEPTOS.items():
+        for nombre, info in DEPTOS.items():
             parte = dahl_chat(
-                persona + f"\n\nFECHA ACTUAL: {hoy}\nESTADO REAL DEL NEGOCIO:\n{est}",
+                info["persona"] + f"\n\nFECHA ACTUAL: {hoy}\nESTADO REAL DEL NEGOCIO:\n{est}",
                 f"Orden del jefe: '{orden}'. Si te compete, ejecuta tu parte concreta con el ESTADO REAL. "
                 "Si no te compete, responde exactamente: NADA QUE HACER.",
                 max_tokens=1200)
             if "NADA QUE HACER" not in _norm(parte):
-                partes.append(f"### {nombre}\n{parte}")
+                partes.append(f"### {info['display']}\n{parte}")
     trabajo = "\n\n".join(partes) if partes else "(sin aportes de departamentos)"
     final = dahl_chat(
         COORD + f"\n\nFECHA ACTUAL: {hoy}\nESTADO REAL DEL NEGOCIO:\n{est}",
@@ -251,6 +301,41 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self._json({"ok": True, "enviado": True, "acciones": len(acciones)})
             except Exception as e:
                 print(f"briefing DM falló: {e}", flush=True)
+                self._json({"ok": False, "error": str(e)[:200]})
+        elif self.path == "/standup":
+            if BOT_LOOP is None:
+                self._json({"ok": False, "error": "bot no listo"})
+                return
+            try:
+                nombre, display, texto = generar_standup()
+            except Exception as e:
+                print(f"standup falló: {e}", flush=True)
+                self._json({"ok": False, "error": str(e)[:200]})
+                return
+            fut = asyncio.run_coroutine_threadsafe(
+                enviar_standup_dm(nombre, display, texto), BOT_LOOP)
+            try:
+                enviado = fut.result(timeout=120)
+                self._json({"ok": True, "enviado": enviado, "depto": nombre})
+            except Exception as e:
+                print(f"standup DM falló: {e}", flush=True)
+                self._json({"ok": False, "error": str(e)[:200]})
+        elif self.path == "/expansion":
+            if BOT_LOOP is None:
+                self._json({"ok": False, "error": "bot no listo"})
+                return
+            try:
+                texto = generar_expansion()
+            except Exception as e:
+                print(f"expansión falló: {e}", flush=True)
+                self._json({"ok": False, "error": str(e)[:200]})
+                return
+            fut = asyncio.run_coroutine_threadsafe(enviar_expansion_dm(texto), BOT_LOOP)
+            try:
+                enviado = fut.result(timeout=120)
+                self._json({"ok": True, "enviado": enviado})
+            except Exception as e:
+                print(f"expansión DM falló: {e}", flush=True)
                 self._json({"ok": False, "error": str(e)[:200]})
         else:
             self._json({"error": "ruta desconocida"}, 404)
@@ -400,7 +485,177 @@ def generar_briefing():
     return texto
 
 
-async def enviar_briefing_dm(texto, acciones):
+def parse_contrataciones(texto):
+    props = []
+    for line in texto.splitlines():
+        s = line.strip()
+        if s.upper().startswith("PROPUESTA_CONTRATACION:"):
+            try:
+                _, resto = s.split(":", 1)
+                nombre, motivo, persona = [x.strip() for x in resto.split("|", 2)]
+                nombre = "".join(c for c in _norm(nombre) if c.isalnum() or c == "_")[:30]
+                if nombre and persona:
+                    props.append({"nombre": nombre, "motivo": motivo, "persona": persona})
+            except ValueError:
+                continue
+    return props
+
+
+MICRO_TAREAS = {
+    "PROSPECCION": "Propón 3 negocios NUEVOS para prospectar hoy (nombre o 'por verificar', cantón, por qué encaja, primer mensaje WA corto sin precio).",
+    "CIERRES": "Redactá el mensaje de seguimiento de hoy para el lead caliente más frío (el que lleva más días sin responder). Corto, tico, precio al final solo si ya lo conoce, termina con pregunta.",
+    "CONTENIDO": "Redactá 1 post para hoy (copy máx 280 caracteres + idea visual que muestre el producto).",
+    "FINANZAS": "Dame el corte de hoy en 4 líneas: ingresos, faltante, días restantes, meta diaria y cuántos clientes faltan.",
+    "VENTAS": "Redactá 1 mensaje de WhatsApp listo para enviar: rescate para un prospecto frío de hace +5 días (sin precio hasta enganchar).",
+    "DISENO": "Proponé 1 concepto de muestra de menú (estructura + paleta + textos) para un tipo de negocio que aún no atacamos.",
+    "SOPORTE": "Reportá: ¿hay dudas o problemas de clientes pendientes? Si no hay, decilo y sugerí 1 mejora preventiva.",
+}
+
+
+def generar_standup():
+    """Rota departamentos: cada uno entrega un micro-resultado con el estado real."""
+    global _STANDUP_IDX
+    nombres = list(DEPTOS.keys())
+    nombre = nombres[_STANDUP_IDX % len(nombres)]
+    _STANDUP_IDX += 1
+    info = DEPTOS[nombre]
+    hoy = datetime.now().strftime("%Y-%m-%d %H:%M")
+    est = estado_texto()
+    tarea = MICRO_TAREAS.get(nombre, "Entregá tu aporte concreto de hoy para acercarnos a la meta.")
+    texto = dahl_chat(
+        info["persona"] + f"\n\nFECHA ACTUAL: {hoy}\nESTADO REAL DEL NEGOCIO:\n{est}",
+        f"STANDUP de {info['display']}. Tarea de hoy: {tarea}\n\n"
+        "Entregá el resultado concreto y listo para usar (máx 1000 caracteres). "
+        "Si necesitás que el jefe apruebe una acción real (ej: mandar un WhatsApp), "
+        "terminala con líneas exactas así:\nACCION: whatsapp | <numero con código país> | <mensaje>\n"
+        "Si no hay nada útil que hacer hoy, respondé exactamente: NADA NUEVO.",
+        max_tokens=1200)
+    return nombre, info["display"], texto
+
+
+def generar_expansion():
+    """La coordinadora evalúa qué roles faltan y propone contrataciones."""
+    hoy = datetime.now().strftime("%Y-%m-%d %H:%M")
+    est = estado_texto()
+    actuales = ", ".join(f"{n} ({DEPTOS[n]['display']})" for n in DEPTOS)
+    texto = dahl_chat(
+        COORD + f"\n\nFECHA ACTUAL: {hoy}\nESTADO REAL DEL NEGOCIO:\n{est}",
+        "REVISIÓN DE EXPANSIÓN. Plantilla actual: " + actuales + ".\n\n"
+        "Analizá qué rol falta para vender más rápido o cubrir un hueco real "
+        "(ej: SEGUIMIENTO que reactive leads fríos cada 3 días, INVESTIGADOR que busque "
+        "competencia y precios, etc.). Si hay un rol que valga la pena, proponé MÁXIMO 2 con este "
+        "formato exacto por línea:\n"
+        "PROPUESTA_CONTRATACION: <NOMBRE_CORTO> | <por qué hace falta, 1 línea> | <persona completa del nuevo empleado: rol, responsabilidades, tono, reglas>\n"
+        "La persona debe ser concreta y útil desde el día 1. Si la plantilla está completa, "
+        "respondé exactamente: PLANTILLA COMPLETA.",
+        max_tokens=1500)
+    return texto
+
+
+async def enviar_dm_boss(texto, view=None):
+    user = await bot.fetch_user(BOSS_ID)
+    await user.send(texto[:1900], view=view)
+
+
+async def enviar_standup_dm(nombre, display, texto):
+    if "NADA NUEVO" in _norm(texto):
+        print(f"standup {nombre}: nada nuevo", flush=True)
+        return False
+    acciones = parse_acciones(texto)
+    limpio = "\n".join(l for l in texto.splitlines()
+                       if not l.strip().upper().startswith("ACCION:")).rstrip()
+    BRIEFINGS.append(f"[{display}] " + limpio[:400])
+    view = StandupView(acciones) if acciones else StandupOrdenView()
+    msg = f"👷 **{display} reporta**\n\n{limpio[:1500]}"
+    if acciones:
+        msg += f"\n\n👆 {len(acciones)} acción(es) propuesta(s)."
+    user = await bot.fetch_user(BOSS_ID)
+    await user.send(msg, view=view)
+    for ac in acciones:
+        a = queue_accion(ac["tipo"], ac["destino"], ac["mensaje"])
+        await user.send(
+            f"📲 **Acción propuesta** — WhatsApp al `+{a['destino']}`:\n> {a['mensaje'][:500]}",
+            view=AccionView(a))
+    print(f"standup {nombre} enviado ({len(acciones)} acciones)", flush=True)
+    return True
+
+
+class StandupView(discord.ui.View):
+    def __init__(self, acciones):
+        super().__init__(timeout=86400)
+        self.acciones = acciones
+
+    @discord.ui.button(label="✅ Aprobar acciones", style=discord.ButtonStyle.green)
+    async def aprobar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not is_boss(interaction):
+            await interaction.response.send_message("⛔ Solo el jefe.", ephemeral=True)
+            return
+        for ac in self.acciones:
+            a = queue_accion(ac["tipo"], ac["destino"], ac["mensaje"])
+            a["estado"] = "aprobada"
+        button.disabled = True
+        self.children[1].disabled = True
+        await interaction.response.edit_message(
+            content=f"✅ {len(self.acciones)} acción(es) aprobadas, se ejecutan solas.", view=self)
+
+    @discord.ui.button(label="✏️ Ordenar", style=discord.ButtonStyle.blurple)
+    async def ordenar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not is_boss(interaction):
+            await interaction.response.send_message("⛔ Solo el jefe.", ephemeral=True)
+            return
+        await interaction.response.send_modal(OrdenModal())
+
+
+class StandupOrdenView(discord.ui.View):
+    @discord.ui.button(label="✏️ Ordenar", style=discord.ButtonStyle.blurple)
+    async def ordenar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not is_boss(interaction):
+            await interaction.response.send_message("⛔ Solo el jefe.", ephemeral=True)
+            return
+        await interaction.response.send_modal(OrdenModal())
+
+
+class ContratarView(discord.ui.View):
+    def __init__(self, propuestas):
+        super().__init__(timeout=86400)
+        self.propuestas = propuestas
+
+    @discord.ui.button(label="🆕 Contratar", style=discord.ButtonStyle.green)
+    async def contratar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not is_boss(interaction):
+            await interaction.response.send_message("⛔ Solo el jefe.", ephemeral=True)
+            return
+        for p in self.propuestas:
+            a = queue_accion("contratar", p["nombre"], p["persona"])
+            a["motivo"] = p["motivo"]
+            a["estado"] = "aprobada"
+        button.disabled = True
+        await interaction.response.edit_message(
+            content=f"🆕 Contratando {len(self.propuestas)} empleado(s)… entran en la próxima actualización.",
+            view=self)
+        print(f"contrataciones aprobadas: {[p['nombre'] for p in self.propuestas]}", flush=True)
+
+    @discord.ui.button(label="❌ No contratar", style=discord.ButtonStyle.red)
+    async def no(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not is_boss(interaction):
+            await interaction.response.send_message("⛔ Solo el jefe.", ephemeral=True)
+            return
+        await interaction.response.edit_message(content="❌ Propuesta descartada.", view=self)
+
+
+async def enviar_expansion_dm(texto):
+    if "PLANTILLA COMPLETA" in _norm(texto):
+        print("expansión: plantilla completa", flush=True)
+        return False
+    props = parse_contrataciones(texto)
+    limpio = "\n".join(l for l in texto.splitlines()
+                       if not l.strip().upper().startswith("PROPUESTA_CONTRATACION:")).rstrip()
+    user = await bot.fetch_user(BOSS_ID)
+    msg = f"🚀 **Expansión del equipo**\n\n{limpio[:1500]}"
+    view = ContratarView(props) if props else None
+    await user.send(msg, view=view)
+    print(f"expansión enviada ({len(props)} propuestas)", flush=True)
+    return True
     user = await bot.fetch_user(BOSS_ID)
     limpio = texto
     idx = limpio.upper().find("ACCION:")
