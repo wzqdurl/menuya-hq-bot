@@ -28,6 +28,12 @@ BOSS_ID = int(os.environ.get("BOSS_ID", "1426737376822296667"))
 DAHL_KEY = os.environ.get("DAHL_API_KEY", "")
 DAHL_BASE = "https://inference.dahl.global/v1"
 DAHL_MODEL = "deepseek-ai/DeepSeek-V4-Flash-0731"
+# Fallback gratuito: si DAHL falla (429/caída), se usa OpenRouter con modelos :free ($0).
+OPENROUTER_KEY = os.environ.get("OPENROUTER_KEY", "")
+OPENROUTER_MODELS = [m.strip() for m in
+                     os.environ.get("OPENROUTER_MODELS",
+                                    "google/gemma-4-31b-it:free,nvidia/nemotron-3-super-120b-a12b:free").split(",")
+                     if m.strip()]
 WEBHOOK = os.environ.get("DISCORD_WEBHOOK_URL", "")
 BRIDGE_SECRET = os.environ.get("BRIDGE_SECRET", "")
 PORT = int(os.environ.get("PORT", "8080"))
@@ -181,6 +187,38 @@ COORD = (CTX + " Eres la COORDINADORA general de MenúYa CR: lees el trabajo de 
 
 
 
+def openrouter_chat(system: str, user: str, max_tokens: int = 1500) -> str:
+    """Fallback gratuito ($0) cuando DAHL no responde. Prueba modelos :free en cadena."""
+    payload_base = {
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "temperature": 0.7,
+        "max_tokens": max_tokens,
+    }
+    last_err = None
+    for modelo in OPENROUTER_MODELS:
+        payload = dict(payload_base, model=modelo)
+        try:
+            req = urllib.request.Request(
+                "https://openrouter.ai/api/v1/chat/completions",
+                data=json.dumps(payload).encode(),
+                headers={"Content-Type": "application/json",
+                         "Authorization": f"Bearer {OPENROUTER_KEY}",
+                         "HTTP-Referer": "https://wzqdurl.github.io/menuya-cr/",
+                         "X-Title": "MenúYa CR HQ"},
+            )
+            with urllib.request.urlopen(req, timeout=120) as r:
+                data = json.load(r)
+            print(f"fallback OpenRouter OK con {modelo}", flush=True)
+            return data["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            last_err = e
+            print(f"fallback {modelo} falló: {e}", flush=True)
+    raise RuntimeError(f"OpenRouter fallback agotado: {last_err}")
+
+
 def dahl_chat(system: str, user: str, max_tokens: int = 1500) -> str:
     payload = {
         "model": DAHL_MODEL,
@@ -211,6 +249,10 @@ def dahl_chat(system: str, user: str, max_tokens: int = 1500) -> str:
             print(f"dahl intento {intento + 1} falló: {e} — esperando {espera}s", flush=True)
             import time
             time.sleep(espera)
+    # DAHL agotado → fallback gratuito por OpenRouter (si hay key configurada)
+    if OPENROUTER_KEY:
+        print("DAHL agotado, usando fallback OpenRouter", flush=True)
+        return openrouter_chat(system, user, max_tokens)
     raise RuntimeError(f"DAHL no respondió tras 4 intentos: {last_err}")
 
 
