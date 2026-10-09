@@ -1,0 +1,5 @@
+# MenúYa HQ — bot de Discord de la empresa, hosteado en Railway 24/7.
+
+__pycache__/
+*.pyc
+.env
