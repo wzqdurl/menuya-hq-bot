@@ -26,11 +26,15 @@ jobs:
           echo "{\"ts\":\"$(date -u +%FT%TZ)\",\"http\":$CODE,\"salud\":$(echo "$BODY" | head -c 200 | jq -R . 2>/dev/null || echo null)}" >> metricas/heartbeat.jsonl
           tail -100 metricas/heartbeat.jsonl > /tmp/hb && mv /tmp/hb metricas/heartbeat.jsonl
 
+      - name: Actualizar panel de estado
+        run: |
+          echo "{\"ts\":\"$(date -u +%FT%TZ)\",\"http\":${{ steps.check.outputs.code }}}" > docs/status.json
+
       - name: Guardar heartbeat en el repo
         run: |
           git config user.name "menuya-watchdog"
           git config user.email "watchdog@menuya.cr"
-          git add metricas/heartbeat.jsonl
+          git add metricas/heartbeat.jsonl docs/status.json
           git diff --cached --quiet || git commit -m "heartbeat $(date -u +%F-%T)"
           git push
 
