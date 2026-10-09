@@ -38,7 +38,10 @@ def _trocear(texto: str, limite: int = 4000):
         actual += linea
     if actual.strip():
         partes.append(actual)
-    return partes or ["(vacío)"]
+    partes = partes or ["(vacío)"]
+    if len(partes) > 1:
+        partes = [f"({i+1}/{len(partes)})\n{p}" for i, p in enumerate(partes)]
+    return partes
 
 
 async def tg_send(texto: str, reply_markup=None, chat_id: int = 0):
@@ -190,7 +193,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def enviar_briefing_tg(texto: str, acciones):
     limpio = "\n".join(l for l in texto.splitlines()
                        if not l.strip().upper().startswith("ACCION:")).rstrip()
-    await tg_send(f"📋 <b>Informe de la coordinadora</b>\n\n{limpio[:3500]}")
+    await tg_send(f"📋 <b>Informe de la coordinadora</b>\n\n{limpio}")
     if acciones:
         await tg_send(f"👆 {len(acciones)} acción(es) propuesta(s) abajo.")
         for ac in acciones:
@@ -208,7 +211,7 @@ async def enviar_standup_tg(nombre: str, display: str, texto: str):
     limpio = "\n".join(l for l in texto.splitlines()
                        if not l.strip().upper().startswith("ACCION:")).rstrip()
     hq.BRIEFINGS.append(f"[{display}] " + limpio[:400])
-    msg = f"👷 <b>{display} reporta</b>\n\n{limpio[:3000]}"
+    msg = f"👷 <b>{display} reporta</b>\n\n{limpio}"
     if acciones:
         msg += f"\n\n👆 {len(acciones)} acción(es) propuesta(s)."
     await tg_send(msg)
@@ -235,7 +238,7 @@ async def enviar_orquestacion_tg(resultados):
     msg = "🤖 <b>Gerente autónomo — órdenes ejecutadas</b>\n\n" + "\n".join(lineas)
     if todas:
         msg += f"\n👆 {len(todas)} acción(es) propuesta(s) abajo."
-    await tg_send(msg[:3800])
+    await tg_send(msg)
     for ac in todas:
         a = hq.queue_accion(ac["tipo"], ac["destino"], ac["mensaje"])
         await tg_send(f"📲 <b>Acción propuesta</b> — WhatsApp al +{a['destino']}:\n"
@@ -247,12 +250,12 @@ async def enviar_orquestacion_tg(resultados):
 async def enviar_expansion_tg(texto: str):
     if "PLANTILLA COMPLETA" in hq._norm(texto):
         return False
-    await tg_send(f"🌱 <b>Revisión de expansión</b>\n\n{texto[:3500]}")
+    await tg_send(f"🌱 <b>Revisión de expansión</b>\n\n{texto}")
     return True
 
 
 async def enviar_panel_tg(texto: str):
-    await tg_send(f"📊 <b>Panel diario</b>\n\n{texto[:3500]}")
+    await tg_send(f"📊 <b>Panel diario</b>\n\n{texto}")
     return True
 
 
