@@ -1,0 +1,30 @@
+name: Respaldo heartbeat horario
+
+# Duplicado del cron menuya-telegram-heartbeat en GitHub Actions.
+# SOLO actúa si Muse está caído (verifica /vigilante primero) -> no duplica mensajes.
+
+on:
+  schedule:
+    - cron: '11 * * * *'
+  workflow_dispatch:
+
+jobs:
+  respaldo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verificar si Muse está vivo
+        id: check
+        run: |
+          CODE=$(curl -s -m 30 -o /dev/null -w "%{http_code}" \
+            https://menuya-hq-bot-production.up.railway.app/vigilante || echo "000")
+          echo "vigilante HTTP $CODE"
+          echo "code=$CODE" >> $GITHUB_OUTPUT
+
+      - name: Heartbeat vía Railway
+        if: steps.check.outputs.code != '200'
+        run: |
+          echo "Muse caído -> respaldo activo: /heartbeat a Railway"
+          curl -s -m 120 -X POST https://menuya-hq-bot-production.up.railway.app/heartbeat \
+            -H "X-Bridge-Secret: ${{ secrets.BRIDGE_SECRET }}" \
+            -H "Content-Type: application/json" -d '{}'
+          echo; echo "heartbeat de respaldo solicitado"
