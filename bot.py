@@ -41,6 +41,35 @@ ACCIONES = []  # {id, tipo, destino, mensaje, estado: pendiente/aprobada/rechaza
 _ACCION_SEQ = 0
 BRIEFINGS = []  # últimos informes enviados (para no repetir)
 BOT_LOOP = None
+ACCIONES_FILE = "/tmp/acciones.json"
+
+
+def guardar_acciones():
+    try:
+        with open(ACCIONES_FILE, "w") as f:
+            json.dump(ACCIONES, f)
+    except Exception:
+        pass
+
+
+def cargar_acciones():
+    global ACCIONES, _ACCION_SEQ
+    try:
+        with open(ACCIONES_FILE) as f:
+            ACCIONES = json.load(f)
+        _ACCION_SEQ = max([a.get("id", 0) for a in ACCIONES] + [0])
+        for a in ACCIONES:
+            # "reclamada" al reiniciar = la VM la tomó pero no sabemos el resultado.
+            # contratar es idempotente (dedup por nombre) → reencolar. whatsapp no (evitar doble envío).
+            if a["estado"] == "reclamada":
+                if a["tipo"] == "contratar":
+                    a["estado"] = "aprobada"
+                else:
+                    print(f"acción {a['id']} ({a['tipo']}) quedó en reclamada tras reinicio: "
+                          "no se reencola para evitar doble envío", flush=True)
+        print(f"acciones restauradas: {len(ACCIONES)}", flush=True)
+    except Exception:
+        pass
 
 
 def estado_texto():
@@ -276,6 +305,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 if a["id"] == aid:
                     a["estado"] = "ejecutada" if data.get("ok") else "fallida"
                     a["resultado"] = data.get("resultado", "")
+                    guardar_acciones()
                     print(f"puente: acción {aid} -> {a['estado']}", flush=True)
                     break
             self._json({"ok": True})
@@ -321,34 +351,22 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 print(f"standup DM falló: {e}", flush=True)
                 self._json({"ok": False, "error": str(e)[:200]})
         elif self.path == "/expansion":
-            import traceback
+            if BOT_LOOP is None:
+                self._json({"ok": False, "error": "bot no listo"})
+                return
             try:
-                print("expansion: inicio", flush=True)
-                if BOT_LOOP is None:
-                    self._json({"ok": False, "error": "bot no listo"})
-                    return
-                try:
-                    texto = generar_expansion()
-                except Exception as e:
-                    print(f"expansión falló: {e}", flush=True)
-                    self._json({"ok": False, "error": str(e)[:200]})
-                    return
-                print("expansion: texto generado, enviando DM", flush=True)
-                fut = asyncio.run_coroutine_threadsafe(enviar_expansion_dm(texto), BOT_LOOP)
-                try:
-                    enviado = fut.result(timeout=120)
-                    print(f"expansion: DM ok, respondiendo {enviado}", flush=True)
-                    self._json({"ok": True, "enviado": enviado})
-                    print("expansion: respuesta enviada", flush=True)
-                except Exception as e:
-                    print(f"expansión DM falló: {e}", flush=True)
-                    self._json({"ok": False, "error": str(e)[:200]})
-            except Exception:
-                traceback.print_exc()
-                try:
-                    self._json({"ok": False, "error": "excepción no capturada"})
-                except Exception:
-                    pass
+                texto = generar_expansion()
+            except Exception as e:
+                print(f"expansión falló: {e}", flush=True)
+                self._json({"ok": False, "error": str(e)[:200]})
+                return
+            fut = asyncio.run_coroutine_threadsafe(enviar_expansion_dm(texto), BOT_LOOP)
+            try:
+                enviado = fut.result(timeout=120)
+                self._json({"ok": True, "enviado": enviado})
+            except Exception as e:
+                print(f"expansión DM falló: {e}", flush=True)
+                self._json({"ok": False, "error": str(e)[:200]})
         else:
             self._json({"error": "ruta desconocida"}, 404)
 
@@ -360,6 +378,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
             pend = [a for a in ACCIONES if a["estado"] == "aprobada"]
             for a in pend:
                 a["estado"] = "reclamada"
+            guardar_acciones()
             self._json({"acciones": [
                 {"id": a["id"], "tipo": a["tipo"], "destino": a["destino"], "mensaje": a["mensaje"]}
                 for a in pend]})
@@ -433,10 +452,12 @@ class AccionView(discord.ui.View):
         if not is_boss(interaction):
             await interaction.response.send_message("⛔ Solo el jefe aprueba.", ephemeral=True)
             return
+        await interaction.response.defer()
         self.accion["estado"] = "aprobada"
+        guardar_acciones()
         button.disabled = True
         self.children[1].disabled = True
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=f"✅ Aprobado — se enviará por WhatsApp al {self.accion['destino']}.",
             view=self)
         print(f"acción {self.accion['id']} aprobada", flush=True)
@@ -446,10 +467,12 @@ class AccionView(discord.ui.View):
         if not is_boss(interaction):
             await interaction.response.send_message("⛔ Solo el jefe aprueba.", ephemeral=True)
             return
+        await interaction.response.defer()
         self.accion["estado"] = "rechazada"
+        guardar_acciones()
         button.disabled = True
         self.children[0].disabled = True
-        await interaction.response.edit_message(content="❌ Acción cancelada.", view=self)
+        await interaction.edit_original_response(content="❌ Acción cancelada.", view=self)
 
 
 def queue_accion(tipo, destino, mensaje):
@@ -458,6 +481,7 @@ def queue_accion(tipo, destino, mensaje):
     a = {"id": _ACCION_SEQ, "tipo": tipo, "destino": destino, "mensaje": mensaje,
          "estado": "pendiente", "resultado": ""}
     ACCIONES.append(a)
+    guardar_acciones()
     return a
 
 
@@ -514,13 +538,15 @@ def parse_contrataciones(texto):
 
 
 MICRO_TAREAS = {
-    "PROSPECCION": "Propón 3 negocios NUEVOS para prospectar hoy (nombre o 'por verificar', cantón, por qué encaja, primer mensaje WA corto sin precio).",
+    "PROSPECCION": "Propón 10 negocios NUEVOS para prospectar (mínimo 10, no menos). Por cada uno: nombre o 'por verificar', cantón, por qué encaja con MenúYa CR y primer mensaje de WhatsApp corto, tico, 'nosotros', SIN precio. Varía las zonas de Costa Rica.",
     "CIERRES": "Redactá el mensaje de seguimiento de hoy para el lead caliente más frío (el que lleva más días sin responder). Corto, tico, precio al final solo si ya lo conoce, termina con pregunta.",
     "CONTENIDO": "Redactá 1 post para hoy (copy máx 280 caracteres + idea visual que muestre el producto).",
     "FINANZAS": "Dame el corte de hoy en 4 líneas: ingresos, faltante, días restantes, meta diaria y cuántos clientes faltan.",
     "VENTAS": "Redactá 1 mensaje de WhatsApp listo para enviar: rescate para un prospecto frío de hace +5 días (sin precio hasta enganchar).",
     "DISENO": "Proponé 1 concepto de muestra de menú (estructura + paleta + textos) para un tipo de negocio que aún no atacamos.",
     "SOPORTE": "Reportá: ¿hay dudas o problemas de clientes pendientes? Si no hay, decilo y sugerí 1 mejora preventiva.",
+    "SEGUIMIENTO": "Revisá el ESTADO y redactá el mensaje de rescate de hoy para el prospecto más frío (3+ días sin responder). Corto, tico, sin sonar desesperado.",
+    "INVESTIGADOR": "Entregá 5 negocios reales nuevos para prospectar (nombre, cantón, dato de contacto si lo hallás; marca 'por verificar' lo incierto).",
 }
 
 
@@ -534,14 +560,18 @@ def generar_standup():
     hoy = datetime.now().strftime("%Y-%m-%d %H:%M")
     est = estado_texto()
     tarea = MICRO_TAREAS.get(nombre, "Entregá tu aporte concreto de hoy para acercarnos a la meta.")
+    # Prospección e Investigador entregan listas largas: más tokens y caracteres
+    es_lista = nombre in ("PROSPECCION", "INVESTIGADOR")
+    max_tok = 2500 if es_lista else 1200
+    max_chars = 1800 if es_lista else 1000
     texto = dahl_chat(
         info["persona"] + f"\n\nFECHA ACTUAL: {hoy}\nESTADO REAL DEL NEGOCIO:\n{est}",
         f"STANDUP de {info['display']}. Tarea de hoy: {tarea}\n\n"
-        "Entregá el resultado concreto y listo para usar (máx 1000 caracteres). "
+        f"Entregá el resultado concreto y listo para usar (máx {max_chars} caracteres). "
         "Si necesitás que el jefe apruebe una acción real (ej: mandar un WhatsApp), "
         "terminala con líneas exactas así:\nACCION: whatsapp | <numero con código país> | <mensaje>\n"
         "Si no hay nada útil que hacer hoy, respondé exactamente: NADA NUEVO.",
-        max_tokens=1200)
+        max_tokens=max_tok)
     return nombre, info["display"], texto
 
 
@@ -602,12 +632,14 @@ class StandupView(discord.ui.View):
         if not is_boss(interaction):
             await interaction.response.send_message("⛔ Solo el jefe.", ephemeral=True)
             return
+        await interaction.response.defer()
         for ac in self.acciones:
             a = queue_accion(ac["tipo"], ac["destino"], ac["mensaje"])
             a["estado"] = "aprobada"
+        guardar_acciones()
         button.disabled = True
         self.children[1].disabled = True
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=f"✅ {len(self.acciones)} acción(es) aprobadas, se ejecutan solas.", view=self)
 
     @discord.ui.button(label="✏️ Ordenar", style=discord.ButtonStyle.blurple)
@@ -637,12 +669,15 @@ class ContratarView(discord.ui.View):
         if not is_boss(interaction):
             await interaction.response.send_message("⛔ Solo el jefe.", ephemeral=True)
             return
+        await interaction.response.defer()
         for p in self.propuestas:
             a = queue_accion("contratar", p["nombre"], p["persona"])
             a["motivo"] = p["motivo"]
             a["estado"] = "aprobada"
+        guardar_acciones()
         button.disabled = True
-        await interaction.response.edit_message(
+        self.children[1].disabled = True
+        await interaction.edit_original_response(
             content=f"🆕 Contratando {len(self.propuestas)} empleado(s)… entran en la próxima actualización.",
             view=self)
         print(f"contrataciones aprobadas: {[p['nombre'] for p in self.propuestas]}", flush=True)
@@ -652,7 +687,8 @@ class ContratarView(discord.ui.View):
         if not is_boss(interaction):
             await interaction.response.send_message("⛔ Solo el jefe.", ephemeral=True)
             return
-        await interaction.response.edit_message(content="❌ Propuesta descartada.", view=self)
+        await interaction.response.defer()
+        await interaction.edit_original_response(content="❌ Propuesta descartada.", view=self)
 
 
 async def enviar_expansion_dm(texto):
@@ -700,14 +736,16 @@ class BriefingView(discord.ui.View):
         if not is_boss(interaction):
             await interaction.response.send_message("⛔ Solo el jefe.", ephemeral=True)
             return
+        await interaction.response.defer()
         n = 0
         for ac in self.acciones:
             a = queue_accion(ac["tipo"], ac["destino"], ac["mensaje"])
             a["estado"] = "aprobada"
             n += 1
+        guardar_acciones()
         button.disabled = True
         self.children[1].disabled = True
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=f"✅ Plan en marcha — {n} acción(es) aprobadas, se ejecutan solas.", view=self)
 
     @discord.ui.button(label="✏️ Ordenar algo", style=discord.ButtonStyle.blurple)
@@ -808,6 +846,9 @@ async def ayuda(interaction: discord.Interaction):
         "• `/ventas`, `/diseno`, `/soporte <mensaje>` — directo con cada departamento (conocen el estado real).\n"
         f"📡 Estado del negocio actualizado: {ESTADO['actualizado'] or 'aún no llega de la VM'}",
         ephemeral=True)
+
+
+cargar_acciones()
 
 
 if __name__ == "__main__":
