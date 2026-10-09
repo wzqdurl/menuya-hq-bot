@@ -1,1 +1,2 @@
 discord.py==2.7.1
+python-telegram-bot==21.6
