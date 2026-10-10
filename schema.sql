@@ -44,3 +44,8 @@ CREATE TABLE IF NOT EXISTS hechos (
   actualizado TIMESTAMPTZ DEFAULT NOW(),
   fuente TEXT
 );
+CREATE TABLE IF NOT EXISTS agentes_vivo (
+  nombre TEXT PRIMARY KEY,
+  data JSONB NOT NULL,
+  actualizado TIMESTAMPTZ DEFAULT NOW()
+);
