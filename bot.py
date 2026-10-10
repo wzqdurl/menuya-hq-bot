@@ -64,6 +64,44 @@ import pathlib as _pl
 _ACC_DIR = "/data" if _pl.Path("/data").is_dir() else "/tmp"
 ACCIONES_FILE = f"{_ACC_DIR}/acciones.json"
 
+# Cola de órdenes del jefe (>> desde Telegram) para la Colmena (VM).
+# La VM reclama vía GET /api/ordenes-jefe cada 30s → eventos orden_jefe.
+# Persistida en archivo para sobrevivir reinicios de Railway.
+ORDENES_JEFE_FILE = f"{_ACC_DIR}/ordenes-jefe.json"
+ORDENES_JEFE_LOCK = threading.Lock()
+
+
+def encolar_orden_jefe(texto):
+    with ORDENES_JEFE_LOCK:
+        ordenes = []
+        try:
+            with open(ORDENES_JEFE_FILE) as f:
+                ordenes = json.load(f)
+        except Exception:
+            pass
+        ordenes.append({"texto": texto,
+                        "ts": datetime.now(timezone.utc).isoformat()})
+        try:
+            with open(ORDENES_JEFE_FILE, "w") as f:
+                json.dump(ordenes, f, ensure_ascii=False)
+        except Exception:
+            pass
+
+
+def reclamar_ordenes_jefe():
+    with ORDENES_JEFE_LOCK:
+        try:
+            with open(ORDENES_JEFE_FILE) as f:
+                ordenes = json.load(f)
+        except Exception:
+            ordenes = []
+        try:
+            with open(ORDENES_JEFE_FILE, "w") as f:
+                json.dump([], f)
+        except Exception:
+            pass
+        return ordenes
+
 
 def guardar_acciones():
     try:
@@ -920,6 +958,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self._json({"acciones": [
                 {"id": a["id"], "tipo": a["tipo"], "destino": a["destino"], "mensaje": a["mensaje"]}
                 for a in pend]})
+        elif self.path == "/api/ordenes-jefe":
+            # Cola de órdenes del jefe (>> desde Telegram) para la Colmena (VM).
+            # La VM las reclama y las convierte en eventos orden_jefe.
+            self._json({"ok": True, "ordenes": reclamar_ordenes_jefe()})
         elif self.path == "/salud":
             self._json({"ok": True, "estado_actualizado": ESTADO["actualizado"],
                         "acciones": len(ACCIONES)})
