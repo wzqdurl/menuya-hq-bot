@@ -388,7 +388,7 @@ def dahl_chat(system: str, user: str, max_tokens: int = 1500) -> str:
         "max_tokens": max_tokens,
     }
     last_err = None
-    for intento in range(4):
+    for intento in range(2):
         try:
             req = urllib.request.Request(
                 DAHL_BASE + "/chat/completions",
