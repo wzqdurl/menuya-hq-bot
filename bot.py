@@ -90,6 +90,26 @@ def cargar_acciones():
 COLAS = {"contenido": [], "fria": []}
 COLAS_FILE = f"{_ACC_DIR}/colas.json"
 
+# Registro de actividad en vivo para el dashboard del supervisor
+# Cada evento: {"at": iso, "tipo": ..., "actor": ..., "detalle": ...}
+ACTIVIDAD = []
+ACTIVIDAD_FILE = f"{_ACC_DIR}/actividad.jsonl"
+MAX_ACTIVIDAD = 500
+
+def log_actividad(tipo, actor, detalle=""):
+    """Registra un evento para el dashboard en vivo."""
+    from datetime import datetime
+    ev = {"at": datetime.now().isoformat(timespec="seconds"), "tipo": tipo,
+          "actor": actor, "detalle": detalle[:500]}
+    ACTIVIDAD.append(ev)
+    if len(ACTIVIDAD) > MAX_ACTIVIDAD:
+        del ACTIVIDAD[:len(ACTIVIDAD) - MAX_ACTIVIDAD]
+    try:
+        with open(ACTIVIDAD_FILE, "a") as f:
+            f.write(json.dumps(ev, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
 
 def guardar_colas():
     try:
@@ -200,6 +220,13 @@ def cargar_roster():
 
 DEPTOS = cargar_roster()
 _STANDUP_IDX = 0
+
+# Dashboard del supervisor (se sirve en /dashboard)
+try:
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard.html")) as _f:
+        DASHBOARD_HTML = _f.read()
+except Exception:
+    DASHBOARD_HTML = "<h1>Dashboard no disponible</h1>"
 _ROSTER_TS = 0
 
 
@@ -351,9 +378,11 @@ def _norm(s: str) -> str:
 
 def ejecutar_orden(orden: str):
     """Devuelve (resultado_final, lista_de_acciones)."""
+    log_actividad("orden_recibida", "JEFE", orden)
     hoy = datetime.now().strftime("%Y-%m-%d %H:%M")
     est = estado_texto()
     nombres = ", ".join(DEPTOS.keys())
+    log_actividad("pensando", "COORDINADORA", f"Desglosando orden entre: {nombres}")
     desglose = dahl_chat(
         COORD + f"\n\nFECHA ACTUAL: {hoy}\nESTADO REAL DEL NEGOCIO:\n{est}",
         f"El jefe (Durling) dio esta ORDEN: '{orden}'. Desglósala en instrucciones concretas y cortas "
@@ -376,6 +405,7 @@ def ejecutar_orden(orden: str):
         if not instr or "NADA" in _norm(instr):
             continue
         matched_any = True
+        log_actividad("trabajando", display, instr[:200])
         parte = dahl_chat(
             persona + f"\n\nFECHA ACTUAL: {hoy}\nESTADO REAL DEL NEGOCIO:\n{est}",
             f"Instrucciones de la coordinadora: {instr}\n\nEjecútalas con el ESTADO REAL y entrega "
@@ -393,6 +423,7 @@ def ejecutar_orden(orden: str):
             if "NADA QUE HACER" not in _norm(parte):
                 partes.append(f"### {info['display']}\n{parte}")
     trabajo = "\n\n".join(partes) if partes else "(sin aportes de departamentos)"
+    log_actividad("sintetizando", "COORDINADORA", f"{len(partes)} departamentos aportaron. Armando resultado final.")
     final = dahl_chat(
         COORD + f"\n\nFECHA ACTUAL: {hoy}\nESTADO REAL DEL NEGOCIO:\n{est}",
         f"Orden del jefe: '{orden}'.\n\nDesglose:\n{desglose}\n\nTrabajo de empleados:\n{trabajo}\n\n"
@@ -404,6 +435,11 @@ def ejecutar_orden(orden: str):
         max_tokens=2000,
     )
     acciones = parse_acciones(final)
+    log_actividad("decision", "COORDINADORA",
+                  f"Orden completada. {len(acciones)} acción(es) propuesta(s)." if acciones else "Orden completada sin acciones.")
+    for a in acciones:
+        log_actividad("accion_propuesta", a.get("display", "EMPLEADO"),
+                      f"{a.get('tipo')}: {a.get('destino', '')} — {(a.get('mensaje') or '')[:120]}")
     return final, acciones
 
 
@@ -429,6 +465,14 @@ class BridgeHandler(BaseHTTPRequestHandler):
         body = json.dumps(obj).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _html(self, html, code=200):
+        body = html.encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -747,6 +791,17 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if self.path == "/ping":
             # público: solo dice "estoy vivo", sin datos sensibles (para vigilantes externos)
             self._json({"ok": True, "servicio": "menuya-hq-bot"})
+            return
+        if self.path == "/dashboard":
+            # Dashboard del supervisor: página en vivo (pública, sin datos sensibles)
+            self._html(DASHBOARD_HTML)
+            return
+        if self.path == "/live":
+            # Feed de actividad en vivo para el dashboard (público, sin datos sensibles)
+            deptos = [{"nombre": info["display"], "estado": "listo"} for info in DEPTOS.values()]
+            self._json({"actividad": ACTIVIDAD[-50:], "departamentos": deptos,
+                        "acciones_pendientes": sum(1 for a in ACCIONES if a["estado"] == "pendiente"),
+                        "acciones_hoy": sum(1 for a in ACCIONES if a.get("creada", "").startswith(datetime.now().strftime("%Y-%m-%d")))})
             return
         if not self._auth():
             self._json({"error": "no autorizado"}, 403)
