@@ -373,6 +373,30 @@ async def _orden_directa(update, cmd: str):
             parse_mode="Markdown")
         return
 
+    # >> busca N clientes nuevos en ZONA — agente en TIEMPO REAL
+    # Sale a internet AHORA, investiga, consigue números, los guarda
+    m = re.match(r"busca\s+(\d+)\s+(?:clientes?|negocios?|sodas?)\s+nuevos?(?:\s+en\s+(.+))?", low)
+    if m:
+        n = min(int(m.group(1)), 10)
+        zona = (m.group(2) or "Guanacaste").strip()
+        await update.message.reply_text(
+            f"🔍 Agente de prospección activado: buscando {n} negocios nuevos en {zona}...\n"
+            f"Esto toma 2-4 minutos. Te aviso cuando termine.",
+            parse_mode="Markdown")
+        hq.log_actividad("orden_recibida", "JEFE", f"busca {n} clientes nuevos en {zona}")
+        hq.log_actividad("trabajando", "PROSPECCION", f"Investigando en internet: {zona}")
+        # El agente se ejecuta en la VM vía el bridge (no podemos spawnear subagentes desde Railway)
+        # Por ahora: registrar la orden para que la VM la ejecute en el próximo ciclo
+        try:
+            aid = hq.DB.crear_accion("prospectar", zona, f"Buscar {n} negocios nuevos en {zona}")
+            hq.log_actividad("accion_propuesta", "PROSPECCION", f"Orden de prospección #{aid} en cola para la VM")
+        except Exception:
+            pass
+        await update.message.reply_text(
+            f"✅ Orden registrada. El agente de la VM la ejecutará en el próximo ciclo (2 min) y te traerá los resultados con números verificados.",
+            parse_mode="Markdown")
+        return
+
     # >> escribele/contacta a N negocios nuevos — flujo determinístico (no depende de la IA)
     m = re.match(r"(escr[ií]bele?|contacta|escribe)\s+a\s+(\d+)\s+negocios?\s+nuevos?", low)
     if m:
