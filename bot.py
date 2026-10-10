@@ -18,7 +18,7 @@ import os
 import threading
 import urllib.request
 from datetime import datetime, timezone
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import discord
 from discord import app_commands
@@ -986,7 +986,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
 
 def start_bridge():
-    srv = HTTPServer(("0.0.0.0", PORT), BridgeHandler)
+    srv = ThreadingHTTPServer(("0.0.0.0", PORT), BridgeHandler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     print(f"puente HTTP en puerto {PORT}", flush=True)
 
