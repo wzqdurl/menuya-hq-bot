@@ -25,6 +25,15 @@ from discord import app_commands
 
 import telegram_hq  # centro de mando por Telegram (comandos + DMs proactivos)
 
+# Base de datos compartida: la empresa vive aquí, no en memoria volátil
+try:
+    import db as DB
+    DB_OK = DB.init_schema()
+except Exception as e:
+    print(f"DB: no disponible ({e}), usando memoria local", flush=True)
+    DB = None
+    DB_OK = False
+
 TOKEN = os.environ["DISCORD_BOT_TOKEN"]
 BOSS_ID = int(os.environ.get("BOSS_ID", "1426737376822296667"))
 DAHL_KEY = os.environ.get("DAHL_API_KEY", "")
@@ -99,6 +108,14 @@ MAX_ACTIVIDAD = 500
 def log_actividad(tipo, actor, detalle=""):
     """Registra un evento para el dashboard en vivo."""
     from datetime import datetime
+    # DB compartida (sobrevive redeploys)
+    if DB_OK:
+        try:
+            DB.log(tipo, actor, detalle)
+            return
+        except Exception:
+            pass
+    # Fallback: memoria local
     ev = {"at": datetime.now().isoformat(timespec="seconds"), "tipo": tipo,
           "actor": actor, "detalle": detalle[:500]}
     ACTIVIDAD.append(ev)
@@ -489,6 +506,12 @@ class BridgeHandler(BaseHTTPRequestHandler):
             # Prospectos nuevos para órdenes de contacto en frío
             if data.get("prospectos_nuevos"):
                 ESTADO["prospectos_nuevos"] = data["prospectos_nuevos"]
+                # Guardar en DB compartida (sobrevive redeploys)
+                if DB_OK:
+                    try:
+                        DB.upsert_prospectos(data["prospectos_nuevos"])
+                    except Exception as e:
+                        print(f"DB: no se pudieron guardar prospectos: {e}", flush=True)
             try:
                 with open(f"{_ACC_DIR}/ultimo_push.txt", "w") as f:
                     f.write(datetime.now(timezone.utc).isoformat())
@@ -802,14 +825,31 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if self.path == "/live":
             # Feed de actividad en vivo para el dashboard (público, sin datos sensibles)
             deptos = [{"nombre": info["display"], "estado": "listo"} for info in DEPTOS.values()]
-            self._json({"actividad": ACTIVIDAD[-50:], "departamentos": deptos,
-                        "acciones_pendientes": sum(1 for a in ACCIONES if a["estado"] == "pendiente"),
-                        "acciones_hoy": sum(1 for a in ACCIONES if a.get("creada", "").startswith(datetime.now().strftime("%Y-%m-%d")))})
+            if DB_OK:
+                try:
+                    actividad = DB.get_actividad(50)
+                    pend = DB.count_pendientes()
+                    hoy = DB.count_acciones_hoy()
+                except Exception:
+                    actividad, pend, hoy = ACTIVIDAD[-50:], 0, 0
+            else:
+                actividad = ACTIVIDAD[-50:]
+                pend = sum(1 for a in ACCIONES if a["estado"] == "pendiente")
+                hoy = sum(1 for a in ACCIONES if a.get("creada", "").startswith(datetime.now().strftime("%Y-%m-%d")))
+            self._json({"actividad": actividad, "departamentos": deptos,
+                        "acciones_pendientes": pend, "acciones_hoy": hoy})
             return
         if not self._auth():
             self._json({"error": "no autorizado"}, 403)
             return
         if self.path == "/acciones":
+            if DB_OK:
+                try:
+                    pend = DB.get_acciones_aprobadas()
+                    self._json({"acciones": pend})
+                    return
+                except Exception:
+                    pass
             pend = [a for a in ACCIONES if a["estado"] == "aprobada"]
             for a in pend:
                 a["estado"] = "reclamada"
@@ -822,6 +862,12 @@ class BridgeHandler(BaseHTTPRequestHandler):
                         "acciones": len(ACCIONES)})
         elif self.path == "/pendientes":
             # Acciones esperando aprobación del jefe (para el recordatorio 24h)
+            if DB_OK:
+                try:
+                    self._json({"pendientes": DB.get_acciones_pendientes()})
+                    return
+                except Exception:
+                    pass
             pend = [a for a in ACCIONES if a["estado"] == "pendiente"]
             self._json({"pendientes": [
                 {"id": a["id"], "tipo": a["tipo"], "destino": a["destino"],
@@ -918,6 +964,14 @@ class AccionView(discord.ui.View):
 
 
 def queue_accion(tipo, destino, mensaje):
+    if DB_OK:
+        try:
+            aid = DB.crear_accion(tipo, destino, mensaje)
+            return {"id": aid, "tipo": tipo, "destino": destino, "mensaje": mensaje,
+                    "estado": "pendiente", "resultado": "",
+                    "creada": datetime.now().isoformat(timespec="seconds")}
+        except Exception:
+            pass
     global _ACCION_SEQ
     _ACCION_SEQ += 1
     a = {"id": _ACCION_SEQ, "tipo": tipo, "destino": destino, "mensaje": mensaje,
