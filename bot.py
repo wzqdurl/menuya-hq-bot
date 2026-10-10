@@ -532,6 +532,15 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 except Exception as e:
                     print(f"DB: no se pudo guardar actividad del agente: {e}", flush=True)
             self._json({"ok": True})
+        elif self.path == "/api/vivo":
+            # Los agentes vivos envían su estado cada ciclo → Postgres
+            nombre = data.get("nombre", "?")
+            if DB_OK:
+                try:
+                    DB.upsert_agente_vivo(nombre, data)
+                except Exception as e:
+                    print(f"DB: no se pudo guardar vivo de {nombre}: {e}", flush=True)
+            self._json({"ok": True})
         elif self.path == "/acciones/resultado":
             aid = data.get("id")
             for a in ACCIONES:
@@ -835,6 +844,14 @@ class BridgeHandler(BaseHTTPRequestHandler):
             # Dashboard del supervisor: página en vivo (pública, sin datos sensibles)
             self._html(DASHBOARD_HTML)
             return
+        if self.path == "/oficina":
+            # Oficina viva: agentes con pensamiento visible
+            try:
+                with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "oficina.html")) as f:
+                    self._html(f.read())
+            except Exception as e:
+                self._json({"error": str(e)[:100]}, 500)
+            return
         if self.path == "/live":
             # Feed de actividad en vivo para el dashboard (público, sin datos sensibles)
             deptos = [{"nombre": info["display"], "estado": "listo"} for info in DEPTOS.values()]
@@ -851,6 +868,21 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 hoy = sum(1 for a in ACCIONES if a.get("creada", "").startswith(datetime.now().strftime("%Y-%m-%d")))
             self._json({"actividad": actividad, "departamentos": deptos,
                         "acciones_pendientes": pend, "acciones_hoy": hoy})
+            return
+        if self.path == "/api/vivo":
+            # GET: devuelve el estado vivo de todos los agentes
+            if DB_OK:
+                try:
+                    agentes = DB.get_agentes_vivo()
+                    # Extraer solo el data
+                    resultado = {}
+                    for a in agentes:
+                        resultado[a["nombre"]] = a["data"]
+                    self._json({"agentes": resultado})
+                except Exception as e:
+                    self._json({"agentes": {}, "error": str(e)[:100]})
+            else:
+                self._json({"agentes": {}})
             return
         if not self._auth():
             self._json({"error": "no autorizado"}, 403)
