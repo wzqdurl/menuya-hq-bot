@@ -519,6 +519,19 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 print(f"vigilante: no se pudo persistir push: {e}", flush=True)
             print(f"puente: estado actualizado ({len(ESTADO['texto'])} chars)", flush=True)
             self._json({"ok": True})
+        elif self.path == "/api/agent-activity":
+            # Los agentes vivos reportan su actividad aquí → va a Postgres → sale en /dashboard
+            agente = data.get("agente", "?")
+            accion = data.get("accion", data.get("tipo", "ciclo"))
+            resultado = data.get("resultado", "")
+            detalle = data.get("detalle", data.get("texto", ""))[:300]
+            texto = f"{accion}: {detalle}" + (f" → {resultado}" if resultado else "")
+            if DB_OK:
+                try:
+                    DB.log(accion, agente.upper(), texto)
+                except Exception as e:
+                    print(f"DB: no se pudo guardar actividad del agente: {e}", flush=True)
+            self._json({"ok": True})
         elif self.path == "/acciones/resultado":
             aid = data.get("id")
             for a in ACCIONES:
