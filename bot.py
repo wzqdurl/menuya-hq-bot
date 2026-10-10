@@ -533,17 +533,22 @@ class BridgeHandler(BaseHTTPRequestHandler):
                     print(f"DB: no se pudo guardar actividad del agente: {e}", flush=True)
             self._json({"ok": True})
         elif self.path == "/api/vivo":
-            # Los agentes vivos envían su estado cada ciclo → Postgres
+            # Los agentes vivos envían su estado cada ciclo
+            # Guardar en memoria (rápido) y en Postgres (persistente) si disponible
             nombre = data.get("nombre", "?")
+            # Memoria: siempre funciona
+            if not hasattr(self.server, '_vivo_mem'):
+                self.server._vivo_mem = {}
+            self.server._vivo_mem[nombre] = {"data": data, "actualizado": datetime.now().isoformat()}
+            # Postgres: si disponible
             if DB_OK:
                 try:
-                    # Crear tabla si no existe (por si init_schema no la creó)
                     DB._q("""CREATE TABLE IF NOT EXISTS agentes_vivo (
                         nombre TEXT PRIMARY KEY, data JSONB NOT NULL,
                         actualizado TIMESTAMPTZ DEFAULT NOW())""")
                     DB.upsert_agente_vivo(nombre, data)
-                except Exception as e:
-                    print(f"DB: no se pudo guardar vivo de {nombre}: {e}", flush=True)
+                except Exception:
+                    pass
             self._json({"ok": True})
         elif self.path == "/acciones/resultado":
             aid = data.get("id")
@@ -875,18 +880,19 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return
         if self.path == "/api/vivo":
             # GET: devuelve el estado vivo de todos los agentes
-            if DB_OK:
+            # Prioridad: memoria (rápido), fallback a Postgres
+            resultado = {}
+            if hasattr(self.server, '_vivo_mem'):
+                for nombre, v in self.server._vivo_mem.items():
+                    resultado[nombre] = v["data"]
+            if not resultado and DB_OK:
                 try:
                     agentes = DB.get_agentes_vivo()
-                    # Extraer solo el data
-                    resultado = {}
                     for a in agentes:
                         resultado[a["nombre"]] = a["data"]
-                    self._json({"agentes": resultado})
-                except Exception as e:
-                    self._json({"agentes": {}, "error": str(e)[:100]})
-            else:
-                self._json({"agentes": {}})
+                except Exception:
+                    pass
+            self._json({"agentes": resultado})
             return
         if not self._auth():
             self._json({"error": "no autorizado"}, 403)
