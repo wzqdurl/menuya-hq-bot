@@ -1225,8 +1225,7 @@ def generar_prospeccion(existentes):
     hoy = datetime.now().strftime("%Y-%m-%d %H:%M")
     est = estado_texto()
     excl = ", ".join(existentes[:50]) or "(ninguno aún)"
-    texto = dahl_chat(
-        DEPTOS["PROSPECCION"]["persona"] + f"\n\nFECHA ACTUAL: {hoy}\nESTADO REAL:\n{est}",
+    prompt_usr = (
         "Proponé 10 negocios REALES de Costa Rica (sodas, restaurantes, cafeterías, "
         "pizzerías, panaderías) que podrían necesitar MenúYa CR y que NO estén en esta "
         f"lista de ya contactados: {excl}.\n"
@@ -1234,22 +1233,31 @@ def generar_prospeccion(existentes):
         '[{"nombre": "...", "canton": "...", "telefono": "+506 .... .... o vacío", '
         '"tipo": "soda/restaurante/cafetería/...", "por_que": "1 línea"}]\n'
         "El campo por_que debe describir el RESULTADO que le vendemos (más pedidos, menos espera, "
-        "cero clientes perdidos), no el producto: jamás digas 'porque necesita un QR'.",
-        max_tokens=2500)
-    # extraer el JSON aunque venga con texto alrededor o en bloque markdown
-    t = texto.strip()
-    if t.startswith("```"):
-        t = t.split("\n", 1)[1] if "\n" in t else t[3:]
-        if t.rstrip().endswith("```"):
-            t = t.rstrip()[:-3]
-    ini, fin = t.find("["), t.rfind("]") + 1
-    if ini < 0 or fin <= ini:
-        return []
-    try:
-        negocios = json.loads(t[ini:fin])
-        return [n for n in negocios if isinstance(n, dict) and n.get("nombre")][:10]
-    except Exception:
-        return []
+        "cero clientes perdidos), no el producto: jamás digas 'porque necesita un QR'.")
+    # Los modelos fallback a veces devuelven basura: reintentar hasta 3 veces.
+    for intento_p in range(3):
+        texto = dahl_chat(
+            DEPTOS["PROSPECCION"]["persona"] + f"\n\nFECHA ACTUAL: {hoy}\nESTADO REAL:\n{est}",
+            prompt_usr,
+            max_tokens=2500)
+        # extraer el JSON aunque venga con texto alrededor o en bloque markdown
+        t = texto.strip()
+        if t.startswith("```"):
+            t = t.split("\n", 1)[1] if "\n" in t else t[3:]
+            if t.rstrip().endswith("```"):
+                t = t.rstrip()[:-3]
+        ini, fin = t.find("["), t.rfind("]") + 1
+        negocios = []
+        if ini >= 0 and fin > ini:
+            try:
+                parsed = json.loads(t[ini:fin])
+                negocios = [n for n in parsed if isinstance(n, dict) and n.get("nombre")][:10]
+            except Exception:
+                pass
+        if negocios:
+            return negocios
+        print(f"prospección: intento {intento_p + 1} sin JSON válido, reintentando", flush=True)
+    return []
 
 
 def generar_reporte_crecimiento():
