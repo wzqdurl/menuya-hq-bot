@@ -861,6 +861,14 @@ class BridgeHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 self._json({"error": str(e)[:100]}, 500)
             return
+        if self.path == "/oficina-visual":
+            # Oficina virtual isométrica 2D
+            try:
+                with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "oficina-visual.html")) as f:
+                    self._html(f.read())
+            except Exception as e:
+                self._json({"error": str(e)[:100]}, 500)
+            return
         if self.path == "/live":
             # Feed de actividad en vivo para el dashboard (público, sin datos sensibles)
             deptos = [{"nombre": info["display"], "estado": "listo"} for info in DEPTOS.values()]
