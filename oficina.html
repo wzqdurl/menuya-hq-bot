@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oficina Viva — MenúYa CR</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0d1117;color:#e6edf3;font-family:system-ui,sans-serif;padding:20px}
+h1{font-size:1.4em;margin-bottom:4px}
+.sub{color:#8b949e;font-size:.85em;margin-bottom:20px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin-bottom:24px}
+.card{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:16px;cursor:pointer;transition:border-color .2s}
+.card:hover{border-color:#58a6ff}
+.card .hdr{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.card .emoji{font-size:1.6em}
+.card .nombre{font-weight:700;font-size:1.05em}
+.card .estado{margin-left:auto;font-size:.8em;padding:3px 10px;border-radius:20px}
+.e-trabajando{background:#1a7f37;color:#fff}
+.e-pensando{background:#9e6a03;color:#fff}
+.e-esperando{background:#6e7681;color:#fff}
+.e-bloqueado{background:#da3633;color:#fff}
+.e-pausado{background:#6e7681;color:#fff}
+.pensamiento{background:#0d1117;border-left:3px solid #58a6ff;padding:8px 12px;margin:10px 0;font-style:italic;font-size:.9em;border-radius:0 6px 6px 0}
+.meta{font-size:.8em;color:#8b949e;margin-top:8px}
+.meta b{color:#e6edf3}
+.accion{font-size:.85em;margin-top:6px}
+.convs{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:16px}
+.convs h2{font-size:1.1em;margin-bottom:12px}
+.conv{padding:8px 0;border-bottom:1px solid #21262d;font-size:.88em}
+.conv:last-child{border:none}
+.conv .quien{color:#58a6ff;font-weight:600}
+.conv .ts{color:#6e7681;font-size:.8em;margin-left:8px}
+.modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:100}
+.modal .box{background:#161b22;margin:5% auto;padding:24px;border-radius:12px;max-width:600px;max-height:80vh;overflow-y:auto}
+.modal .close{float:right;cursor:pointer;font-size:1.4em;color:#8b949e}
+.actualizado{color:#6e7681;font-size:.75em;margin-top:8px}
+</style>
+</head>
+<body>
+<h1>🏢 Oficina Viva — MenúYa CR</h1>
+<div class="sub">Agentes con pensamiento visible · actualiza cada 5s</div>
+<div class="grid" id="grid"></div>
+<div class="convs">
+<h2>💬 Conversaciones en vivo</h2>
+<div id="convs"></div>
+</div>
+<div class="modal" id="modal"><div class="box"><span class="close" onclick="cerrar()">×</span><div id="modalBody"></div></div></div>
+<script>
+const EMOJIS={coordinador:'🏢',prospeccion:'🔍',ventas:'💼',contenido:'✍️',analisis:'📊',community:'💬',revival:'🔄'};
+const ESTADO_TXT={trabajando:'🟢 trabajando',pensando:'🟡 pensando',esperando:'⚪ esperando',bloqueado:'🔴 bloqueado',pausado:'⏸️ pausado'};
+let datos={};
+async function cargar(){
+  try{
+    const r=await fetch('/api/vivo');
+    const j=await r.json();
+    datos=j.agentes||{};
+    render();
+  }catch(e){}
+}
+function hace(ts){
+  if(!ts)return'?';
+  const s=Math.floor((Date.now()-new Date(ts).getTime())/1000);
+  if(s<60)return `hace ${s}s`;
+  return `hace ${Math.floor(s/60)}m`;
+}
+function render(){
+  const g=document.getElementById('grid');
+  g.innerHTML='';
+  const todasConvs=[];
+  for(const[n,d]of Object.entries(datos)){
+    const e=EMOJIS[n]||'🤖';
+    const est=d.estado||'esperando';
+    const card=document.createElement('div');
+    card.className='card';
+    card.onclick=()=>ver(n);
+    card.innerHTML=`
+      <div class="hdr"><span class="emoji">${e}</span><span class="nombre">${n.toUpperCase()}</span>
+      <span class="estado e-${est}">${ESTADO_TXT[est]||est}</span></div>
+      <div class="pensamiento">💭 ${d.pensamiento_actual||'...'}</div>
+      <div class="accion">▶️ ${d.accion_actual||''}</div>
+      <div class="accion" style="color:#8b949e">✓ ${d.ultima_accion||''} → ${d.resultado_ultima||''}</div>
+      <div class="meta">${Object.entries(d.metricas||{}).map(([k,v])=>`<b>${k}:</b> ${v}`).join(' · ')}</div>
+      <div class="actualizado">${hace(d.ultima_actualizacion)}</div>`;
+    g.appendChild(card);
+    (d.conversaciones_recientes||[]).forEach(c=>todasConvs.push({...c,agente:n}));
+  }
+  todasConvs.sort((a,b)=>new Date(b.ts)-new Date(a.ts));
+  document.getElementById('convs').innerHTML=todasConvs.slice(0,20).map(c=>
+    `<div class="conv"><span class="quien">${c.de.toUpperCase()} → ${c.a.toUpperCase()}:</span> ${c.mensaje}<span class="ts">${hace(c.ts)}</span></div>`
+  ).join('')||'<div style="color:#6e7681">Sin conversaciones aún</div>';
+}
+function ver(n){
+  const d=datos[n];if(!d)return;
+  document.getElementById('modalBody').innerHTML=`
+    <h2>${EMOJIS[n]||'🤖'} ${n.toUpperCase()}</h2>
+    <div class="pensamiento">💭 ${d.pensamiento_actual}</div>
+    <h3 style="margin:12px 0 8px">Conversaciones</h3>
+    ${(d.conversaciones_recientes||[]).map(c=>`<div class="conv"><span class="quien">${c.de} → ${c.a}:</span> ${c.mensaje}<span class="ts">${hace(c.ts)}</span></div>`).join('')||'Ninguna'}`;
+  document.getElementById('modal').style.display='block';
+}
+function cerrar(){document.getElementById('modal').style.display='none';}
+cargar();setInterval(cargar,5000);
+</script>
+</body>
+</html>
