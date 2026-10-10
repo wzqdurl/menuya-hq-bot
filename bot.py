@@ -18,7 +18,7 @@ import os
 import threading
 import urllib.request
 from datetime import datetime, timezone
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import discord
 from discord import app_commands
@@ -377,20 +377,6 @@ def openrouter_chat(system: str, user: str, max_tokens: int = 1500) -> str:
     raise RuntimeError(f"OpenRouter fallback agotado: {last_err}")
 
 
-def _es_basura(texto: str) -> bool:
-    """Detecta respuestas degeneradas del LLM (repetición extrema o casi vacías)."""
-    t = texto.strip()
-    if len(t) < 10:
-        return True
-    palabras = t.split()
-    if len(palabras) < 5:
-        return True
-    # si las 5 palabras más comunes cubren >80% del texto, es repetición degenerada
-    from collections import Counter
-    top5 = sum(c for _, c in Counter(palabras).most_common(5))
-    return top5 / len(palabras) > 0.8
-
-
 def dahl_chat(system: str, user: str, max_tokens: int = 1500) -> str:
     payload = {
         "model": DAHL_MODEL,
@@ -402,7 +388,7 @@ def dahl_chat(system: str, user: str, max_tokens: int = 1500) -> str:
         "max_tokens": max_tokens,
     }
     last_err = None
-    for intento in range(2):
+    for intento in range(4):
         try:
             req = urllib.request.Request(
                 DAHL_BASE + "/chat/completions",
@@ -410,14 +396,9 @@ def dahl_chat(system: str, user: str, max_tokens: int = 1500) -> str:
                 headers={"Content-Type": "application/json",
                          "Authorization": f"Bearer {DAHL_KEY}"},
             )
-            with urllib.request.urlopen(req, timeout=60) as r:
+            with urllib.request.urlopen(req, timeout=180) as r:
                 data = json.load(r)
-            texto = data["choices"][0]["message"]["content"].strip()
-            # DAHL a veces devuelve basura (vacío o repetición degenerada):
-            # tratarlo como fallo para que entren los fallbacks.
-            if not texto or _es_basura(texto):
-                raise RuntimeError("DAHL devolvió respuesta vacía o degenerada")
-            return texto
+            return data["choices"][0]["message"]["content"].strip()
         except Exception as e:
             last_err = e
             es_429 = "429" in str(e)
@@ -441,7 +422,7 @@ def dahl_chat(system: str, user: str, max_tokens: int = 1500) -> str:
         return gemini_chat(system, user, max_tokens)
     except Exception as e:
         print(f"Gemini falló: {e}", flush=True)
-    raise RuntimeError(f"DAHL no respondió tras 2 intentos y fallbacks agotados: {last_err}")
+    raise RuntimeError(f"DAHL no respondió tras 4 intentos y fallbacks agotados: {last_err}")
 
 
 def _norm(s: str) -> str:
@@ -506,9 +487,17 @@ def ejecutar_orden(orden: str):
         "al final agrega una sección 'ACCIONES PROPUESTAS' con líneas exactas así:\n"
         "ACCION: whatsapp | <numero con código país, ej 50687045770> | <mensaje completo>\n"
         "Solo propone acciones útiles y concretas. Directa, sin rodeos.",
-        max_tokens=2000,
+        max_tokens=4000,
     )
     acciones = parse_acciones(final)
+    # Validación: si la orden pedía enviar WhatsApps pero no se generaron acciones,
+    # advertirlo en vez de decir "ejecutada" en silencio.
+    _pide_whatsapp = any(k in orden.lower() for k in ("whatsapp", "escrib", "envi", "mensaje", "escríb"))
+    if _pide_whatsapp and not acciones:
+        final += ("\n\n⚠️ ADVERTENCIA: la orden pedía enviar WhatsApp pero no se generaron "
+                  "las líneas ACCION. No se encoló ningún envío. Revisar el formato de salida del LLM.")
+        log_actividad("advertencia", "COORDINADORA",
+                      "Orden pedía WhatsApp pero parse_acciones devolvió 0 acciones.")
     log_actividad("decision", "COORDINADORA",
                   f"Orden completada. {len(acciones)} acción(es) propuesta(s)." if acciones else "Orden completada sin acciones.")
     for a in acciones:
@@ -1005,7 +994,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
 
 def start_bridge():
-    srv = ThreadingHTTPServer(("0.0.0.0", PORT), BridgeHandler)
+    srv = HTTPServer(("0.0.0.0", PORT), BridgeHandler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     print(f"puente HTTP en puerto {PORT}", flush=True)
 
@@ -1225,7 +1214,8 @@ def generar_prospeccion(existentes):
     hoy = datetime.now().strftime("%Y-%m-%d %H:%M")
     est = estado_texto()
     excl = ", ".join(existentes[:50]) or "(ninguno aún)"
-    prompt_usr = (
+    texto = dahl_chat(
+        DEPTOS["PROSPECCION"]["persona"] + f"\n\nFECHA ACTUAL: {hoy}\nESTADO REAL:\n{est}",
         "Proponé 10 negocios REALES de Costa Rica (sodas, restaurantes, cafeterías, "
         "pizzerías, panaderías) que podrían necesitar MenúYa CR y que NO estén en esta "
         f"lista de ya contactados: {excl}.\n"
@@ -1233,31 +1223,17 @@ def generar_prospeccion(existentes):
         '[{"nombre": "...", "canton": "...", "telefono": "+506 .... .... o vacío", '
         '"tipo": "soda/restaurante/cafetería/...", "por_que": "1 línea"}]\n'
         "El campo por_que debe describir el RESULTADO que le vendemos (más pedidos, menos espera, "
-        "cero clientes perdidos), no el producto: jamás digas 'porque necesita un QR'.")
-    # Los modelos fallback a veces devuelven basura: reintentar hasta 3 veces.
-    for intento_p in range(3):
-        texto = dahl_chat(
-            DEPTOS["PROSPECCION"]["persona"] + f"\n\nFECHA ACTUAL: {hoy}\nESTADO REAL:\n{est}",
-            prompt_usr,
-            max_tokens=2500)
-        # extraer el JSON aunque venga con texto alrededor o en bloque markdown
-        t = texto.strip()
-        if t.startswith("```"):
-            t = t.split("\n", 1)[1] if "\n" in t else t[3:]
-            if t.rstrip().endswith("```"):
-                t = t.rstrip()[:-3]
-        ini, fin = t.find("["), t.rfind("]") + 1
-        negocios = []
-        if ini >= 0 and fin > ini:
-            try:
-                parsed = json.loads(t[ini:fin])
-                negocios = [n for n in parsed if isinstance(n, dict) and n.get("nombre")][:10]
-            except Exception:
-                pass
-        if negocios:
-            return negocios
-        print(f"prospección: intento {intento_p + 1} sin JSON válido, reintentando", flush=True)
-    return []
+        "cero clientes perdidos), no el producto: jamás digas 'porque necesita un QR'.",
+        max_tokens=2500)
+    # extraer el JSON aunque venga con texto alrededor
+    ini, fin = texto.find("["), texto.rfind("]") + 1
+    if ini < 0 or fin <= ini:
+        return []
+    try:
+        negocios = json.loads(texto[ini:fin])
+        return [n for n in negocios if isinstance(n, dict) and n.get("nombre")][:10]
+    except Exception:
+        return []
 
 
 def generar_reporte_crecimiento():
