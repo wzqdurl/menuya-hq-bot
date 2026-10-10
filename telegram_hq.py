@@ -172,12 +172,26 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except ValueError:
         return
     a = next((x for x in hq.ACCIONES if x["id"] == aid), None)
+    # Buscar también en DB (por si el bot se redesplegó)
+    if not a and hq.DB_OK:
+        try:
+            for p in hq.DB.get_acciones_pendientes():
+                if p["id"] == aid:
+                    a = p
+                    break
+        except Exception:
+            pass
     if not a:
         await q.edit_message_text("Esa acción ya no existe.")
         return
     if accion == "ap":
         a["estado"] = "aprobada"
         hq.guardar_acciones()
+        if hq.DB_OK:
+            try:
+                hq.DB.set_accion_estado(aid, "aprobada")
+            except Exception:
+                pass
         hq.log_actividad("aprobada", "JEFE", f"WhatsApp al +{a['destino']}: {(a.get('mensaje') or '')[:120]}")
         await q.edit_message_text(
             f"✅ Aprobado — se enviará por WhatsApp al +{a['destino']}.", parse_mode="HTML")
@@ -185,6 +199,11 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         a["estado"] = "rechazada"
         hq.guardar_acciones()
+        if hq.DB_OK:
+            try:
+                hq.DB.set_accion_estado(aid, "rechazada")
+            except Exception:
+                pass
         hq.log_actividad("rechazada", "JEFE", f"Acción {aid} cancelada")
         await q.edit_message_text("❌ Acción cancelada.")
         log.info("acción %s rechazada por Telegram", aid)
@@ -358,11 +377,19 @@ async def _orden_directa(update, cmd: str):
     m = re.match(r"escr[ií]bele?\s+a\s+(\d+)\s+negocios?\s+nuevos?", low)
     if m:
         n = min(int(m.group(1)), 10)
-        prospectos = hq.ESTADO.get("prospectos_nuevos", [])
+        # Leer de la DB compartida (siempre fresca, sobrevive redeploys)
+        prospectos = []
+        if hq.DB_OK:
+            try:
+                prospectos = hq.DB.get_prospectos_nuevos(n)
+            except Exception:
+                pass
+        if not prospectos:
+            prospectos = hq.ESTADO.get("prospectos_nuevos", [])
         if not prospectos:
             await update.message.reply_text(
-                "⚠️ No tengo la lista de prospectos nuevos (el estado de la VM aún no la incluye). "
-                "Esperá al próximo push (15 min) o pedime `>> status` para verificar.",
+                "⚠️ No tengo la lista de prospectos nuevos todavía. "
+                "La VM la está sincronizando — probá de nuevo en 2 minutos.",
                 parse_mode="Markdown")
             return
         elegidos = prospectos[:n]
