@@ -373,10 +373,10 @@ async def _orden_directa(update, cmd: str):
             parse_mode="Markdown")
         return
 
-    # >> escribele a N negocios nuevos — flujo determinístico (no depende de la IA)
-    m = re.match(r"escr[ií]bele?\s+a\s+(\d+)\s+negocios?\s+nuevos?", low)
+    # >> escribele/contacta a N negocios nuevos — flujo determinístico (no depende de la IA)
+    m = re.match(r"(escr[ií]bele?|contacta|escribe)\s+a\s+(\d+)\s+negocios?\s+nuevos?", low)
     if m:
-        n = min(int(m.group(1)), 10)
+        n = min(int(m.group(2)), 10)
         # Leer de la DB compartida (siempre fresca, sobrevive redeploys)
         prospectos = []
         if hq.DB_OK:
