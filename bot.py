@@ -377,6 +377,20 @@ def openrouter_chat(system: str, user: str, max_tokens: int = 1500) -> str:
     raise RuntimeError(f"OpenRouter fallback agotado: {last_err}")
 
 
+def _es_basura(texto: str) -> bool:
+    """Detecta respuestas degeneradas del LLM (repetición extrema o casi vacías)."""
+    t = texto.strip()
+    if len(t) < 10:
+        return True
+    palabras = t.split()
+    if len(palabras) < 5:
+        return True
+    # si las 5 palabras más comunes cubren >80% del texto, es repetición degenerada
+    from collections import Counter
+    top5 = sum(c for _, c in Counter(palabras).most_common(5))
+    return top5 / len(palabras) > 0.8
+
+
 def dahl_chat(system: str, user: str, max_tokens: int = 1500) -> str:
     payload = {
         "model": DAHL_MODEL,
@@ -398,7 +412,12 @@ def dahl_chat(system: str, user: str, max_tokens: int = 1500) -> str:
             )
             with urllib.request.urlopen(req, timeout=60) as r:
                 data = json.load(r)
-            return data["choices"][0]["message"]["content"].strip()
+            texto = data["choices"][0]["message"]["content"].strip()
+            # DAHL a veces devuelve basura (vacío o repetición degenerada):
+            # tratarlo como fallo para que entren los fallbacks.
+            if not texto or _es_basura(texto):
+                raise RuntimeError("DAHL devolvió respuesta vacía o degenerada")
+            return texto
         except Exception as e:
             last_err = e
             es_429 = "429" in str(e)
@@ -422,7 +441,7 @@ def dahl_chat(system: str, user: str, max_tokens: int = 1500) -> str:
         return gemini_chat(system, user, max_tokens)
     except Exception as e:
         print(f"Gemini falló: {e}", flush=True)
-    raise RuntimeError(f"DAHL no respondió tras 4 intentos y fallbacks agotados: {last_err}")
+    raise RuntimeError(f"DAHL no respondió tras 2 intentos y fallbacks agotados: {last_err}")
 
 
 def _norm(s: str) -> str:
