@@ -112,3 +112,14 @@ def set_hecho(clave, valor, fuente=""):
     _q("INSERT INTO hechos (clave, valor, fuente) VALUES (%s,%s,%s) "
        "ON CONFLICT (clave) DO UPDATE SET valor=EXCLUDED.valor, fuente=EXCLUDED.fuente, actualizado=NOW()",
        (clave, valor, fuente))
+
+def upsert_agente_vivo(nombre, data):
+    import json
+    _q("""INSERT INTO agentes_vivo (nombre, data, actualizado)
+          VALUES (%s, %s::jsonb, NOW())
+          ON CONFLICT (nombre) DO UPDATE SET data=EXCLUDED.data, actualizado=NOW()""",
+       (nombre, json.dumps(data)))
+
+def get_agentes_vivo():
+    rows = _q("SELECT nombre, data, actualizado FROM agentes_vivo ORDER BY nombre", fetch="all")
+    return [{"nombre": r[0], "data": r[1], "actualizado": r[2].isoformat() if r[2] else None} for r in (rows or [])]
