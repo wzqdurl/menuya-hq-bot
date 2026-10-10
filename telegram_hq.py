@@ -178,12 +178,14 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if accion == "ap":
         a["estado"] = "aprobada"
         hq.guardar_acciones()
+        hq.log_actividad("aprobada", "JEFE", f"WhatsApp al +{a['destino']}: {(a.get('mensaje') or '')[:120]}")
         await q.edit_message_text(
             f"✅ Aprobado — se enviará por WhatsApp al +{a['destino']}.", parse_mode="HTML")
         log.info("acción %s aprobada por Telegram", aid)
     else:
         a["estado"] = "rechazada"
         hq.guardar_acciones()
+        hq.log_actividad("rechazada", "JEFE", f"Acción {aid} cancelada")
         await q.edit_message_text("❌ Acción cancelada.")
         log.info("acción %s rechazada por Telegram", aid)
 
