@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MenúYa HQ — Centro de Mando</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,system-ui,sans-serif;background:#0f0f1a;color:#eee;min-height:100vh}
+header{background:#1a1a2e;padding:16px 20px;border-bottom:3px solid #FFB800;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:10}
+header h1{font-size:20px;color:#FFB800}
+header .live{font-size:13px;color:#4ade80}
+.wrap{max-width:1100px;margin:0 auto;padding:20px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px}
+.card{background:#1a1a2e;border:2px solid #333;border-radius:12px;padding:14px;text-align:center}
+.card .n{font-size:13px;color:#aaa;margin-bottom:4px}
+.card .v{font-size:24px;font-weight:800;color:#FFB800}
+h2{font-size:16px;margin:20px 0 12px;color:#FFB800}
+#feed{background:#141422;border-radius:12px;padding:8px;max-height:60vh;overflow-y:auto}
+.ev{display:flex;gap:10px;padding:10px 12px;border-bottom:1px solid #222;align-items:flex-start;animation:slide .3s}
+@keyframes slide{from{opacity:0;transform:translateY(-6px)}to{opacity:1}}
+.ev .t{font-size:11px;color:#666;white-space:nowrap;min-width:52px;padding-top:2px}
+.ev .b{flex:1}
+.ev .actor{font-weight:700;font-size:13px}
+.ev .det{font-size:13px;color:#bbb;margin-top:2px;word-break:break-word}
+.tag{display:inline-block;font-size:10px;padding:2px 8px;border-radius:20px;margin-right:6px;font-weight:700}
+.orden_recibida{background:#3b2f04;color:#FFB800}
+.pensando{background:#1e3a5f;color:#60a5fa}
+.trabajando{background:#3f1d5c;color:#c084fc}
+.sintetizando{background:#0f3a2e;color:#4ade80}
+.decision{background:#3a1f0f;color:#fb923c}
+.accion_propuesta{background:#3b2f04;color:#FFB800}
+.aprobada{background:#0f3a2e;color:#4ade80}
+.rechazada{background:#3a0f0f;color:#f87171}
+.enviada{background:#0f3a2e;color:#4ade80}
+.deptos{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.depto{background:#1a1a2e;border:2px solid #2a2a3e;border-radius:10px;padding:12px;text-align:center;font-size:13px;font-weight:700}
+.depto .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#4ade80;margin-right:6px;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+footer{text-align:center;padding:20px;color:#555;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+<h1>🍽️ MenúYa HQ — Centro de Mando</h1>
+<span class="live">● EN VIVO</span>
+</header>
+<div class="wrap">
+<div class="grid">
+<div class="card"><div class="n">Acciones hoy</div><div class="v" id="s-acciones">–</div></div>
+<div class="card"><div class="n">Pendientes aprobación</div><div class="v" id="s-pend">–</div></div>
+<div class="card"><div class="n">Departamentos</div><div class="v" id="s-deptos">9</div></div>
+</div>
+<h2>👥 Departamentos</h2>
+<div class="deptos" id="deptos"></div>
+<h2>📡 Actividad en vivo</h2>
+<div id="feed"><div style="padding:20px;text-align:center;color:#666">Conectando…</div></div>
+</div>
+<footer>MenúYa CR · se actualiza cada 5 segundos</footer>
+<script>
+const ICONS={orden_recibida:'📥',pensando:'🤔',trabajando:'⚙️',sintetizando:'🧩',decision:'✅',accion_propuesta:'📋',aprobada:'✅',rechazada:'❌',enviada:'📤'};
+const NAMES={orden_recibida:'ORDEN',pensando:'PENSANDO',trabajando:'TRABAJANDO',sintetizando:'SINTETIZANDO',decision:'DECISIÓN',accion_propuesta:'ACCIÓN',aprobada:'APROBADA',rechazada:'RECHAZADA',enviada:'ENVIADA'};
+let seen=new Set();
+async function tick(){
+  try{
+    const r=await fetch('/live');const d=await r.json();
+    document.getElementById('s-acciones').textContent=d.acciones_hoy??0;
+    document.getElementById('s-pend').textContent=d.acciones_pendientes??0;
+    document.getElementById('s-deptos').textContent=(d.departamentos||[]).length;
+    document.getElementById('deptos').innerHTML=(d.departamentos||[]).map(x=>`<div class="depto"><span class="dot"></span>${x.nombre}</div>`).join('');
+    const feed=document.getElementById('feed');
+    const evs=(d.actividad||[]).slice().reverse();
+    if(!evs.length){feed.innerHTML='<div style="padding:20px;text-align:center;color:#666">Sin actividad reciente. La empresa está en espera de órdenes.</div>';return;}
+    let html='';
+    for(const e of evs){
+      const key=e.at+e.actor+e.detalle;
+      const tag=NAMES[e.tipo]||e.tipo.toUpperCase();
+      html+=`<div class="ev"><div class="t">${(e.at||'').slice(11,16)}</div><div class="b"><span class="tag ${e.tipo}">${ICONS[e.tipo]||'•'} ${tag}</span><span class="actor">${e.actor}</span><div class="det">${(e.detalle||'').replace(/</g,'&lt;')}</div></div></div>`;
+    }
+    feed.innerHTML=html;
+  }catch(err){/* reintentar */}
+}
+tick();setInterval(tick,5000);
+</script>
+</body>
+</html>
