@@ -352,6 +352,27 @@ async def _orden_directa(update, cmd: str):
             parse_mode="Markdown")
         return
 
+    # >> status agentes — estado de los 6 agentes en 1 línea c/u
+    if low == "status agentes":
+        try:
+            import urllib.request, json
+            req = urllib.request.Request(
+                "https://menuya-hq-bot-production.up.railway.app/api/vivo",
+                headers={"X-Bridge-Secret": hq.BRIDGE_SECRET} if hasattr(hq, 'BRIDGE_SECRET') else {})
+            data = json.loads(urllib.request.urlopen(req, timeout=10).read())
+            agentes = data.get("agentes", {})
+            lineas = ["🤖 *Agentes vivos:*"]
+            for nombre in ["coordinador", "prospeccion", "ventas", "contenido", "analisis", "community"]:
+                a = agentes.get(nombre, {})
+                estado = a.get("estado", "?")
+                emoji = {"trabajando": "🟢", "pensando": "🟡", "esperando": "⚪",
+                         "bloqueado": "🔴", "pausado": "🟠"}.get(estado, "❓")
+                lineas.append(f"{emoji} {nombre}: {estado}")
+            await update.message.reply_text("\n".join(lineas), parse_mode="Markdown")
+        except Exception as e:
+            await update.message.reply_text(f"⚠️ No pude leer el estado: {e}", parse_mode="Markdown")
+        return
+
     # >> oficina — link al dashboard de la oficina viva
     if low == "oficina":
         await update.message.reply_text(
