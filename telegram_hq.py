@@ -354,6 +354,37 @@ async def _orden_directa(update, cmd: str):
             parse_mode="Markdown")
         return
 
+    # >> escribele a N negocios nuevos — flujo determinístico (no depende de la IA)
+    m = re.match(r"escr[ií]bele?\s+a\s+(\d+)\s+negocios?\s+nuevos?", low)
+    if m:
+        n = min(int(m.group(1)), 10)
+        prospectos = hq.ESTADO.get("prospectos_nuevos", [])
+        if not prospectos:
+            await update.message.reply_text(
+                "⚠️ No tengo la lista de prospectos nuevos (el estado de la VM aún no la incluye). "
+                "Esperá al próximo push (15 min) o pedime `>> status` para verificar.",
+                parse_mode="Markdown")
+            return
+        elegidos = prospectos[:n]
+        # Plantilla variante B (la que el jefe aprobó para frío)
+        plantilla = ("Hola {negocio} 👋 Soy de MenúYa CR. Hacemos menús digitales con QR "
+                     "para sodas y restaurantes — sus clientes escanean y ven todo desde el celular, "
+                     "sin descargar nada. ¿Les interesaría ver una muestra gratis de cómo quedaría el suyo?")
+        propuestas = []
+        for p in elegidos:
+            tel = "".join(c for c in str(p.get("telefono", "")) if c.isdigit())
+            if not tel:
+                continue
+            propuestas.append({"tipo": "whatsapp", "destino": tel,
+                               "mensaje": plantilla.format(negocio=p.get("negocio", ""))})
+        hq.log_actividad("decision", "VENTAS", f"{len(propuestas)} mensajes en frío preparados para aprobación.")
+        await update.message.reply_text(
+            f"✅ {len(propuestas)} mensaje(s) listos. Te los mando uno por uno para aprobar con ✅/❌.",
+            parse_mode="Markdown")
+        # _mandar_acciones los encola y manda cada uno con sus botones
+        await _mandar_acciones(update, propuestas)
+        return
+
     # >> log comentarios
     if low == "log comentarios":
         await update.message.reply_text("Consultando log de comentarios...", parse_mode="Markdown")
