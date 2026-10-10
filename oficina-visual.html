@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oficina Virtual — MenúYa CR</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #1a1a2e; color: #fff; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+#oficina { position: relative; width: 100vw; height: 100vh; overflow: auto; }
+.departamento {
+  position: absolute; border: 3px solid #333; border-radius: 12px;
+  background: rgba(255,255,255,0.03); padding: 10px;
+}
+.departamento h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; 
+  margin-bottom: 8px; color: #888; }
+.agente {
+  position: relative; width: 80px; height: 100px; margin: 5px;
+  display: inline-block; text-align: center; cursor: pointer;
+  transition: transform 0.2s;
+}
+.agente:hover { transform: scale(1.1); }
+.avatar {
+  width: 50px; height: 50px; border-radius: 50%; margin: 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px; border: 3px solid;
+}
+.avatar.trabajando { border-color: #4caf50; background: #1b5e20; }
+.avatar.pensando { border-color: #ffeb3b; background: #f57f17; animation: pulse 1s infinite; }
+.avatar.esperando { border-color: #9e9e9e; background: #424242; }
+.avatar.bloqueado { border-color: #f44336; background: #b71c1c; }
+.avatar.pausado { border-color: #ff9800; background: #e65100; }
+@keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+.nombre { font-size: 10px; margin-top: 4px; }
+.estado-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+.burbuja {
+  position: absolute; background: #fff; color: #000; border-radius: 8px;
+  padding: 6px 10px; font-size: 11px; max-width: 200px; z-index: 10;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3); display: none;
+}
+.burbuja.visible { display: block; animation: aparecer 0.3s; }
+@keyframes aparecer { from { opacity: 0; transform: translateY(10px); } }
+#modal {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  background: #2a2a3e; border-radius: 16px; padding: 24px; min-width: 400px;
+  max-width: 600px; display: none; z-index: 100; border: 2px solid #444;
+}
+#modal.visible { display: block; }
+#modal h2 { margin-bottom: 12px; }
+#modal .pensamiento { background: #1a1a2e; padding: 12px; border-radius: 8px; margin: 12px 0; }
+#overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; z-index: 99; }
+#overlay.visible { display: block; }
+.conexion { position: absolute; height: 2px; background: #4caf50; z-index: 5; display: none; }
+</style>
+</head>
+<body>
+<div id="oficina"></div>
+<div id="overlay" onclick="cerrarModal()"></div>
+<div id="modal">
+  <h2 id="modal-titulo"></h2>
+  <div><span id="modal-estado"></span></div>
+  <div class="pensamiento" id="modal-pensamiento"></div>
+  <h4>Conversaciones recientes:</h4>
+  <div id="modal-convs"></div>
+  <button onclick="cerrarModal()" style="margin-top:16px;padding:8px 16px;border-radius:8px;border:none;background:#4caf50;color:#fff;cursor:pointer;">Cerrar</button>
+</div>
+
+<script>
+const DEPTOS = {
+  coordinador: { nombre: 'Coordinación', x: 50, y: 50, w: 200, h: 180, emoji: '👔' },
+  prospeccion: { nombre: 'Prospección', x: 300, y: 50, w: 200, h: 180, emoji: '🔍' },
+  ventas: { nombre: 'Ventas', x: 550, y: 50, w: 200, h: 180, emoji: '💰' },
+  contenido: { nombre: 'Contenido', x: 50, y: 280, w: 200, h: 180, emoji: '🎨' },
+  analisis: { nombre: 'Análisis', x: 300, y: 280, w: 200, h: 180, emoji: '📊' },
+  community: { nombre: 'Community', x: 550, y: 280, w: 200, h: 180, emoji: '💬' },
+};
+
+let datosAgentes = {};
+
+function crearOficina() {
+  const of = document.getElementById('oficina');
+  for (const [key, d] of Object.entries(DEPTOS)) {
+    const div = document.createElement('div');
+    div.className = 'departamento';
+    div.style.left = d.x + 'px'; div.style.top = d.y + 'px';
+    div.style.width = d.w + 'px'; div.style.height = d.h + 'px';
+    div.id = 'depto-' + key;
+    div.innerHTML = `<h3>${d.emoji} ${d.nombre}</h3><div id="agentes-${key}"></div>`;
+    of.appendChild(div);
+  }
+}
+
+function actualizar() {
+  fetch('/api/vivo').then(r => r.json()).then(data => {
+    datosAgentes = data.agentes || {};
+    for (const [key, d] of Object.entries(DEPTOS)) {
+      const cont = document.getElementById('agentes-' + key);
+      const ag = datosAgentes[key];
+      if (!ag) { cont.innerHTML = '<div style="color:#666;font-size:11px;">offline</div>'; continue; }
+      const estado = ag.estado || 'esperando';
+      cont.innerHTML = `
+        <div class="agente" onclick="abrirModal('${key}')">
+          <div class="avatar ${estado}">${d.emoji}</div>
+          <div class="nombre">${key}</div>
+          <div style="font-size:9px;color:#888;">${estado}</div>
+        </div>`;
+      // Burbuja si hay conversación reciente
+      const convs = ag.conversaciones_recientes || [];
+      if (convs.length > 0) {
+        const b = document.createElement('div');
+        b.className = 'burbuja visible';
+        b.style.left = (d.x + 20) + 'px'; b.style.top = (d.y - 40) + 'px';
+        b.textContent = '💬 ' + (convs[convs.length-1].texto || '').substring(0, 60);
+        document.getElementById('oficina').appendChild(b);
+        setTimeout(() => b.remove(), 4000);
+      }
+    }
+  }).catch(e => console.error(e));
+}
+
+function abrirModal(key) {
+  const ag = datosAgentes[key];
+  if (!ag) return;
+  document.getElementById('modal-titulo').textContent = DEPTOS[key].emoji + ' ' + key;
+  document.getElementById('modal-estado').innerHTML = `Estado: <b>${ag.estado}</b>`;
+  document.getElementById('modal-pensamiento').textContent = ag.pensamiento_actual || 'Sin pensamiento';
+  const convs = (ag.conversaciones_recientes || []).slice(-5).reverse();
+  document.getElementById('modal-convs').innerHTML = convs.map(c =>
+    `<div style="font-size:12px;margin:6px 0;padding:8px;background:#1a1a2e;border-radius:6px;">${c.texto || JSON.stringify(c)}</div>`
+  ).join('') || '<div style="color:#666;">Sin conversaciones</div>';
+  document.getElementById('modal').classList.add('visible');
+  document.getElementById('overlay').classList.add('visible');
+}
+
+function cerrarModal() {
+  document.getElementById('modal').classList.remove('visible');
+  document.getElementById('overlay').classList.remove('visible');
+}
+
+crearOficina();
+actualizar();
+setInterval(actualizar, 5000);
+</script>
+</body>
+</html>
