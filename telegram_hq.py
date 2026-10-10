@@ -340,6 +340,14 @@ async def _orden_directa(update, cmd: str):
     low = cmd.lower()
     await update.message.reply_text(f"Recibido. Ejecutando: _{cmd}_", parse_mode="Markdown")
 
+    # >> orden → también a la Colmena (VM) como evento orden_jefe.
+    # Los meta-comandos (status...) se resuelven aquí y no se encolan.
+    if low not in ("status", "status agentes"):
+        try:
+            hq.encolar_orden_jefe(cmd)
+        except Exception:
+            pass
+
     # >> status
     if low == "status":
         # Pedir estado a la VM vía bridge
