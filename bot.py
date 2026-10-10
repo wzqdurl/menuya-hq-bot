@@ -486,6 +486,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if self.path == "/estado":
             ESTADO["texto"] = data.get("texto", "")
             ESTADO["actualizado"] = datetime.now().isoformat(timespec="minutes")
+            # Prospectos nuevos para órdenes de contacto en frío
+            if data.get("prospectos_nuevos"):
+                ESTADO["prospectos_nuevos"] = data["prospectos_nuevos"]
             try:
                 with open(f"{_ACC_DIR}/ultimo_push.txt", "w") as f:
                     f.write(datetime.now(timezone.utc).isoformat())
