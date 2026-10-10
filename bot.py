@@ -396,7 +396,7 @@ def dahl_chat(system: str, user: str, max_tokens: int = 1500) -> str:
                 headers={"Content-Type": "application/json",
                          "Authorization": f"Bearer {DAHL_KEY}"},
             )
-            with urllib.request.urlopen(req, timeout=180) as r:
+            with urllib.request.urlopen(req, timeout=60) as r:
                 data = json.load(r)
             return data["choices"][0]["message"]["content"].strip()
         except Exception as e:
