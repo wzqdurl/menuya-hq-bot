@@ -537,6 +537,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
             nombre = data.get("nombre", "?")
             if DB_OK:
                 try:
+                    # Crear tabla si no existe (por si init_schema no la creó)
+                    DB._q("""CREATE TABLE IF NOT EXISTS agentes_vivo (
+                        nombre TEXT PRIMARY KEY, data JSONB NOT NULL,
+                        actualizado TIMESTAMPTZ DEFAULT NOW())""")
                     DB.upsert_agente_vivo(nombre, data)
                 except Exception as e:
                     print(f"DB: no se pudo guardar vivo de {nombre}: {e}", flush=True)
