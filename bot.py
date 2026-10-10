@@ -1217,12 +1217,17 @@ def generar_prospeccion(existentes):
         "El campo por_que debe describir el RESULTADO que le vendemos (más pedidos, menos espera, "
         "cero clientes perdidos), no el producto: jamás digas 'porque necesita un QR'.",
         max_tokens=2500)
-    # extraer el JSON aunque venga con texto alrededor
-    ini, fin = texto.find("["), texto.rfind("]") + 1
+    # extraer el JSON aunque venga con texto alrededor o en bloque markdown
+    t = texto.strip()
+    if t.startswith("```"):
+        t = t.split("\n", 1)[1] if "\n" in t else t[3:]
+        if t.rstrip().endswith("```"):
+            t = t.rstrip()[:-3]
+    ini, fin = t.find("["), t.rfind("]") + 1
     if ini < 0 or fin <= ini:
         return []
     try:
-        negocios = json.loads(texto[ini:fin])
+        negocios = json.loads(t[ini:fin])
         return [n for n in negocios if isinstance(n, dict) and n.get("nombre")][:10]
     except Exception:
         return []
