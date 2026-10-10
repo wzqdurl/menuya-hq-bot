@@ -352,6 +352,37 @@ async def _orden_directa(update, cmd: str):
             parse_mode="Markdown")
         return
 
+    # >> oficina — link al dashboard de la oficina viva
+    if low == "oficina":
+        await update.message.reply_text(
+            "🏢 *Oficina viva — MenúYa CR*\n"
+            "https://menuya-hq-bot-production.up.railway.app/dashboard\n"
+            "Agentes en tiempo real, comunicación entre ellos, métricas en vivo.",
+            parse_mode="Markdown")
+        return
+
+    # >> agente [nombre] — log del agente específico
+    m = re.match(r"agente\s+(\w+)", low)
+    if m:
+        nombre = m.group(1).lower()
+        # Leer las últimas decisiones/acciones del agente desde la DB
+        try:
+            acts = hq.DB.get_actividad(50) if hasattr(hq.DB, 'get_actividad') else []
+            # Filtrar por agente
+            relevantes = [a for a in acts if nombre in str(a.get('actor','')).lower()][:10]
+            if relevantes:
+                lineas = [f"🤖 *Log de {nombre.upper()}* (últimas 10):"]
+                for a in relevantes:
+                    lineas.append(f"• {a.get('at','')[:16]}: {str(a.get('detalle',''))[:100]}")
+                await update.message.reply_text("\n".join(lineas), parse_mode="Markdown")
+            else:
+                await update.message.reply_text(
+                    f"No hay actividad reciente de '{nombre}'. Agentes: coordinador, prospeccion, ventas, contenido, analisis, community, revival.",
+                    parse_mode="Markdown")
+        except Exception as e:
+            await update.message.reply_text(f"Error consultando log: {e}", parse_mode="Markdown")
+        return
+
     # >> responde wa / >> responde ig
     if low in ("responde wa", "responde ig"):
         await update.message.reply_text(
