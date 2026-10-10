@@ -357,11 +357,21 @@ async def _orden_directa(update, cmd: str):
         await update.message.reply_text("Consultando log de comentarios...", parse_mode="Markdown")
         return
 
-    await update.message.reply_text(
-        "❓ No entendí. Comandos:\n"
-        "• `>> status`\n• `>> responde wa` / `>> responde ig`\n"
-        "• `>> comenta 10 ig`\n• `>> log comentarios`",
-        parse_mode="Markdown")
+    # Orden libre: se envía a la coordinadora que reparte entre los departamentos
+    aviso = await update.message.reply_text("Recibido, jefe 👔 La coordinadora reparte la orden…")
+    try:
+        resultado, acciones = await asyncio.to_thread(hq.ejecutar_orden, cmd)
+        limpio = resultado
+        idx = limpio.upper().find("ACCIONES PROPUESTAS")
+        if idx >= 0:
+            limpio = limpio[:idx].rstrip()
+        for trozo in _trocear(f"✅ <b>Orden ejecutada.</b>\n\n{limpio}"):
+            await update.message.reply_text(trozo, parse_mode="HTML")
+        if acciones:
+            await _mandar_acciones(update, acciones)
+        await aviso.delete()
+    except Exception as e:
+        await update.message.reply_text(f"😕 Falló la orden: {str(e)[:300]}")
 
 
 async def on_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
