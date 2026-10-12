@@ -66,6 +66,35 @@ def _botones_accion(accion_id: int):
     ]])
 
 
+async def proponer_accion_tg(data: dict):
+    """Propone una acción desde la VM: la encola y la manda al jefe con botones ✅/❌.
+    data: {tipo, destino, mensaje, titulo?, imagen_b64?}
+    Retorna el id de la acción encolada."""
+    import base64
+    global _app
+    tipo = data.get("tipo", "")
+    destino = data.get("destino", "")
+    mensaje = data.get("mensaje", "")
+    a = hq.queue_accion(tipo, destino, mensaje)
+    aid = a["id"]
+    botones = InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Aprobar", callback_data=f"ap:{aid}"),
+        InlineKeyboardButton("❌ Rechazar", callback_data=f"rj:{aid}"),
+    ]])
+    if tipo == "publicar_post" and data.get("imagen_b64") and _app is not None and BOSS_CHAT:
+        img = base64.b64decode(data["imagen_b64"])
+        caption = (f"📸 <b>Post #{destino} para aprobar</b>\n\n"
+                   f"<i>{mensaje[:900]}</i>")
+        await _app.bot.send_photo(chat_id=BOSS_CHAT, photo=img, caption=caption,
+                                  reply_markup=botones, parse_mode="HTML")
+    else:
+        titulo = data.get("titulo", "Acción propuesta")
+        txt = f"📲 <b>{titulo}</b>\n\n<i>{mensaje[:900]}</i>"
+        await tg_send(txt, reply_markup=botones)
+    log.info("acción %s propuesta por /proponer (tipo=%s)", aid, tipo)
+    return aid
+
+
 async def _mandar_acciones(update_or_query, acciones):
     """Cola las acciones y las manda con botones ✅/❌. update_or_query: message-like."""
     send = update_or_query.message.reply_text if hasattr(update_or_query, "message") and update_or_query.message else None
@@ -192,9 +221,17 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 hq.DB.set_accion_estado(aid, "aprobada")
             except Exception:
                 pass
-        hq.log_actividad("aprobada", "JEFE", f"WhatsApp al +{a['destino']}: {(a.get('mensaje') or '')[:120]}")
-        await q.edit_message_text(
-            f"✅ Aprobado — se enviará por WhatsApp al +{a['destino']}.", parse_mode="HTML")
+        hq.log_actividad("aprobada", "JEFE", f"{a.get('tipo')}: {(a.get('mensaje') or '')[:120]}")
+        if a.get("tipo") == "publicar_post":
+            try:
+                await q.edit_message_caption(
+                    caption=f"✅ Post aprobado — se programará para publicar.",
+                    reply_markup=None)
+            except Exception:
+                await q.edit_message_text("✅ Post aprobado — se programará para publicar.")
+        else:
+            await q.edit_message_text(
+                f"✅ Aprobado — se enviará por WhatsApp al +{a['destino']}.", parse_mode="HTML")
         log.info("acción %s aprobada por Telegram", aid)
     else:
         a["estado"] = "rechazada"
@@ -205,7 +242,13 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception:
                 pass
         hq.log_actividad("rechazada", "JEFE", f"Acción {aid} cancelada")
-        await q.edit_message_text("❌ Acción cancelada.")
+        try:
+            await q.edit_message_text("❌ Acción cancelada.")
+        except Exception:
+            try:
+                await q.edit_message_caption(caption="❌ Acción cancelada.", reply_markup=None)
+            except Exception:
+                pass
         log.info("acción %s rechazada por Telegram", aid)
 
 
