@@ -1193,12 +1193,15 @@ def generar_standup():
     tarea = MICRO_TAREAS.get(nombre, "Entregá tu aporte concreto de hoy para acercarnos a la meta.")
     # Prospección e Investigador entregan listas largas: más tokens y caracteres
     es_lista = nombre in ("PROSPECCION", "INVESTIGADOR")
-    max_tok = 2500 if es_lista else 1200
+    max_tok = 3500 if es_lista else 1200
     max_chars = 1800 if es_lista else 1000
+    limite_items = "MÁXIMO 7 negocios. " if es_lista else ""
     texto = dahl_chat(
         info["persona"] + f"\n\nFECHA ACTUAL: {hoy}\nESTADO REAL DEL NEGOCIO:\n{est}",
         f"STANDUP de {info['display']}. Tarea de hoy: {tarea}\n\n"
-        f"Entregá el resultado concreto y listo para usar (máx {max_chars} caracteres). "
+        f"{limite_items}Entregá el resultado concreto y listo para usar (máx {max_chars} caracteres). "
+        "IMPORTANTE: es mejor entregar menos items COMPLETOS que más items cortados a la mitad. "
+        "Nunca dejes una frase o un negocio a medias: si no cabe completo, no lo incluyas. "
         "Si necesitás que el jefe apruebe una acción real (ej: mandar un WhatsApp), "
         "terminala con líneas exactas así:\nACCION: whatsapp | <numero con código país> | <mensaje>\n"
         "Si no hay nada útil que hacer hoy, respondé exactamente: NADA NUEVO.",
