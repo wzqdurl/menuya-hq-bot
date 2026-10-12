@@ -729,6 +729,25 @@ class BridgeHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 print(f"reporte-crecimiento TG falló: {e}", flush=True)
                 self._json({"ok": False, "error": str(e)[:200]})
+        elif self.path == "/proponer":
+            # La VM propone una acción que necesita aprobación del jefe.
+            # Se encola y se manda por Telegram con botones ✅/❌.
+            # Body: {tipo, destino, mensaje, titulo?, imagen_b64?}
+            if BOT_LOOP is None:
+                self._json({"ok": False, "error": "bot no listo"})
+                return
+            tipo = data.get("tipo", "")
+            if not tipo or not data.get("mensaje"):
+                self._json({"ok": False, "error": "faltan tipo/mensaje"})
+                return
+            try:
+                fut = asyncio.run_coroutine_threadsafe(
+                    telegram_hq.proponer_accion_tg(data), BOT_LOOP)
+                aid = fut.result(timeout=120)
+                self._json({"ok": True, "id": aid})
+            except Exception as e:
+                print(f"proponer falló: {e}", flush=True)
+                self._json({"ok": False, "error": str(e)[:200]})
         elif self.path == "/prospectar":
             # Prospección automática: devuelve JSON con negocios nuevos para HubSpot.
             # El llamador pasa {"existentes": [nombres]} para evitar duplicados.
