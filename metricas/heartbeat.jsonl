@@ -97,3 +97,4 @@
 {"ts":"2026-11-07T21:42:41Z","http":200,"salud":"{\"ok\": true, \"servicio\": \"menuya-hq-bot\"}"}
 {"ts":"2026-11-08T05:50:09Z","http":200,"salud":"{\"ok\": true, \"servicio\": \"menuya-hq-bot\"}"}
 {"ts":"2026-11-08T13:13:05Z","http":404,"salud":"{\"status\":\"error\",\"code\":404,\"message\":\"Application not found\",\"request_id\":\"z-Oq-EDGQZ--1TqpHn5Ytg\"}"}
+{"ts":"2026-11-08T21:56:42Z","http":404,"salud":"{\"status\":\"error\",\"code\":404,\"message\":\"Application not found\",\"request_id\":\"K_RgqmGgS4GSEzEUg4a9AQ\"}"}
