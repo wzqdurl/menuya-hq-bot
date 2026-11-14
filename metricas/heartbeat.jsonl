@@ -1,4 +1,3 @@
-{"ts":"2026-10-14T17:02:09Z","http":200,"salud":"{\"ok\": true, \"servicio\": \"menuya-hq-bot\"}"}
 {"ts":"2026-10-14T21:34:25Z","http":200,"salud":"{\"ok\": true, \"servicio\": \"menuya-hq-bot\"}"}
 {"ts":"2026-10-15T04:24:43Z","http":200,"salud":"{\"ok\": true, \"servicio\": \"menuya-hq-bot\"}"}
 {"ts":"2026-10-15T11:18:33Z","http":200,"salud":"{\"ok\": true, \"servicio\": \"menuya-hq-bot\"}"}
@@ -98,3 +97,4 @@
 {"ts":"2026-11-13T19:32:49Z","http":404,"salud":"{\"status\":\"error\",\"code\":404,\"message\":\"Application not found\",\"request_id\":\"ZxiVxqbnSROMV-Iwc9o55Q\"}"}
 {"ts":"2026-11-14T06:05:45Z","http":404,"salud":"{\"status\":\"error\",\"code\":404,\"message\":\"Application not found\",\"request_id\":\"thW_KbnVTj2gOAOsezItjw\"}"}
 {"ts":"2026-11-14T13:24:41Z","http":404,"salud":"{\"status\":\"error\",\"code\":404,\"message\":\"Application not found\",\"request_id\":\"1oDThebHTOGCRotHO8poTA\"}"}
+{"ts":"2026-11-14T22:15:17Z","http":404,"salud":"{\"status\":\"error\",\"code\":404,\"message\":\"Application not found\",\"request_id\":\"lnV3g5CGRwaREk0j8u2xcg\"}"}
